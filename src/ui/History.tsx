@@ -2,16 +2,12 @@ import { useEffect, useState } from 'react'
 import { approachById, parseAll, type Approach, type ParseState } from '@/approaches'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { batchUsd, usd } from '@/lib/cost'
 import type { Run, RunSummary } from '@/lib/run'
 import { models } from '@/models'
 import { presets } from '@/prompts'
 import { Choice } from './Choice'
 import { Result } from './Result'
-
-const usd = (costs: (number | null)[]) => {
-  const known = costs.filter((c) => c !== null)
-  return `${known.length < costs.length ? '≥' : ''}$${known.reduce((a, b) => a + b, 0).toFixed(4)}`
-}
 
 const getJson = async <T,>(url: string): Promise<T> => {
   const res = await fetch(url)
@@ -42,7 +38,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
     onOpenBatch(await Promise.all(batch.slice(0, 4).reverse().map((r) => getJson<Run>(`/api/runs/${r.id}`))))
   }
 
-  const batchCost = (batchId: string) => usd(runs!.filter((r) => r.batchId === batchId).map((r) => r.metrics.costUsd))
+  const batchCost = (batchId: string) => batchUsd(runs!.filter((r) => r.batchId === batchId).map((r) => r.metrics.costUsd))
 
   const act = (fn: () => Promise<void>) => () => fn().catch((e: Error) => setError(e.message))
 
@@ -68,7 +64,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
               <TableCell>{approachById(r.approach)?.label ?? r.approach}</TableCell>
               <TableCell>{models.find((m) => m.id === r.modelId)?.label ?? r.modelId}</TableCell>
               <TableCell className="tabular-nums">{r.metrics.ttfrMs == null ? '–' : `${(r.metrics.ttfrMs / 1000).toFixed(2)}s`}</TableCell>
-              <TableCell className="tabular-nums">{usd([r.metrics.costUsd])}</TableCell>
+              <TableCell className="tabular-nums">{usd(r.metrics.costUsd)}</TableCell>
               <TableCell className="tabular-nums">{batchCost(r.batchId)}</TableCell>
               <TableCell>{r.metrics.aborted ? 'aborted' : r.metrics.errorCount}</TableCell>
               <TableCell>{r.rating ?? '–'}</TableCell>

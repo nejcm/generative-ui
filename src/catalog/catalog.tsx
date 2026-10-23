@@ -1,9 +1,12 @@
 import {
   createStateStore,
   defineCatalog,
+  evaluateVisibility,
   getByPath,
   resolveElementProps,
+  resolveRepeatItemStatePath,
   resolveRepeatStatePath,
+  splitRepeatVisibility,
   type PropResolutionContext,
   type Spec,
   type UIElement,
@@ -148,29 +151,36 @@ export function createsCycle(elements: Spec['elements'], id: string) {
 // End-of-stream checks. Children pointing at rejected elements were already counted when rejected.
 export function finalSpecErrors(spec: Spec, rejected: Set<string>) {
   const errors: { at: string; message: string }[] = []
-  if (!spec.elements[spec.root]) errors.push({ at: 'root', message: `root element "${spec.root}" is missing` })
+  if (!Object.hasOwn(spec.elements, spec.root)) errors.push({ at: 'root', message: `root element "${spec.root}" is missing` })
   for (const [id, element] of Object.entries(spec.elements))
     for (const child of element.children ?? [])
-      if (!spec.elements[child] && !rejected.has(child)) errors.push({ at: id, message: `missing child "${child}"` })
+      if (!Object.hasOwn(spec.elements, child) && !rejected.has(child)) errors.push({ at: id, message: `missing child "${child}"` })
   return [...errors, ...resolvedPropErrors(spec)]
 }
 
-// Expression props validated against final state, once per repeat item in scope; first failure per element counts.
+// Expression props validated against final state the way the pinned Renderer walks it (visibility, repeat
+// item filters and scopes; react dist ElementRenderer/RepeatChildren). First failure per element counts.
 function resolvedPropErrors(spec: Spec) {
   const failures = new Map<string, string>()
   const visit = (id: string, ctx: PropResolutionContext) => {
+    if (!Object.hasOwn(spec.elements, id)) return
     const element = spec.elements[id]
-    if (!element) return
+    const inRepeat = ctx.repeatBasePath !== undefined
+    const { container, itemFilter } =
+      element.repeat && !inRepeat ? splitRepeatVisibility(element.visible) : { container: element.visible, itemFilter: undefined }
+    if (container !== undefined && !evaluateVisibility(container, ctx)) return
     const result = componentProps[element.type as ComponentName].safeParse(resolveElementProps(element.props ?? {}, ctx))
     if (!result.success && !failures.has(id)) failures.set(id, `${element.type} props after resolving state: ${z.prettifyError(result.error)}`)
     const children = element.children ?? []
     if (!element.repeat) return children.forEach((child) => visit(child, ctx))
     const path = resolveRepeatStatePath(element.repeat.statePath, ctx.repeatBasePath)
     const items = path === undefined ? undefined : getByPath(ctx.stateModel, path)
-    if (Array.isArray(items))
-      items.forEach((repeatItem, repeatIndex) =>
-        children.forEach((child) => visit(child, { ...ctx, repeatItem, repeatIndex, repeatBasePath: `${path}/${repeatIndex}` })),
-      )
+    if (path === undefined || !Array.isArray(items)) return
+    items.forEach((repeatItem, repeatIndex) => {
+      if (itemFilter !== undefined && !evaluateVisibility(itemFilter, { stateModel: spec.state ?? {}, repeatItem, repeatIndex })) return
+      const scope = { ...ctx, repeatItem, repeatIndex, repeatBasePath: resolveRepeatItemStatePath(path, repeatIndex) }
+      children.forEach((child) => visit(child, scope))
+    })
   }
   visit(spec.root, { stateModel: spec.state ?? {} })
   return [...failures].map(([at, message]) => ({ at, message }))

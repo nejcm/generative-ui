@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { usd } from '@/lib/cost'
 import type { Run } from '@/lib/run'
 
 const secs = (ms: number | null | undefined) => (ms == null ? '–' : `${(ms / 1000).toFixed(2)}s`)
@@ -19,7 +20,7 @@ export function MetricsStrip({ metrics: m, saved, onRate, onNotes }: Props) {
           ['TTFT', secs(m.ttftMs)],
           ['TTFR', secs(m.ttfrMs)],
           ['Total', secs(m.totalMs)],
-          ['Cost', m.costUsd == null ? '–' : `$${m.costUsd.toFixed(4)}`],
+          ['Cost', usd(m.costUsd ?? null)],
           ['In', m.inputTokens ?? '–'],
           ['Out', m.outputTokens ?? '–'],
           ['Valid', m.valid == null ? '–' : m.valid ? '✓' : '✗'],

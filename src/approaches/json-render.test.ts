@@ -151,3 +151,46 @@ describe('round 2 regressions', () => {
     ])
   })
 })
+
+describe('round 4 regressions', () => {
+  const parse = async (...patches: object[]) => {
+    const parser = jsonRender.createParser()
+    await parser.push(jsonl(...patches))
+    return parser.end()
+  }
+  const add = (id: string, value: object) => ({ op: 'add', path: `/elements/${id}`, value })
+
+  test('elements hidden by visible are not prop-checked, visible ones are', async () => {
+    const run = (showError: boolean) =>
+      parse(
+        lines.root,
+        lines.main(['err']),
+        add('err', { type: 'Text', props: { text: { $state: '/error/message' } }, visible: { $state: '/showError' }, children: [] }),
+        { op: 'add', path: '/state/showError', value: showError },
+      )
+    expect((await run(false)).errors).toEqual([])
+    expect((await run(true)).errors).toEqual([{ at: 'err', message: expect.stringContaining('after resolving state') }])
+  })
+
+  test('repeat item filters skip hidden items', async () => {
+    const final = await parse(
+      { op: 'add', path: '/root', value: 'list' },
+      add('list', { type: 'Stack', props: {}, repeat: { statePath: '/items' }, visible: { $item: 'show' }, children: ['item'] }),
+      add('item', { type: 'Text', props: { text: { $item: 'name' } }, children: [] }),
+      { op: 'add', path: '/state/items', value: [{ show: true, name: 'a' }, { show: false }] },
+    )
+    expect(final.errors).toEqual([])
+  })
+
+  test('a child named like an Object.prototype key is an ordinary dangling reference', async () => {
+    const final = await parse(lines.root, lines.main(['toString', 'email']), lines.email)
+    expect(final.errors).toEqual([{ at: 'main', message: 'missing child "toString"' }])
+    expect(final.renderable).toBe(true)
+  })
+
+  test('a root named like an Object.prototype key is missing, not renderable', async () => {
+    const final = await parse({ op: 'add', path: '/root', value: 'constructor' })
+    expect(final.renderable).toBe(false)
+    expect(final.errors).toEqual([{ at: 'root', message: 'root element "constructor" is missing' }])
+  })
+})

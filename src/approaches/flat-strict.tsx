@@ -131,8 +131,8 @@ export function flatToSpec(value: unknown, { complete, closed, final }: { comple
     errors.push(...finalSpecErrors(spec, rejected))
   }
   for (const element of Object.values(elements))
-    element.children = element.children!.filter((c) => !rejected.has(c) && (!final || c in elements))
-  return { spec, renderable: Boolean(elements[root]), errors }
+    element.children = element.children!.filter((c) => !rejected.has(c) && (!final || Object.hasOwn(elements, c)))
+  return { spec, renderable: Object.hasOwn(elements, root), errors }
 }
 
 function createParser(): Parser {

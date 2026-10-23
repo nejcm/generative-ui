@@ -133,3 +133,11 @@ describe('round 2 regressions', () => {
     expect(completedElements('{"root":"a","elements":[1]')).toBe(Infinity)
   })
 })
+
+test('a dangling child named toString is dropped and counted, not rendered', async () => {
+  const parser = flatStrict.createParser()
+  await parser.push(doc(el.main(['toString', 'stat']), el.stat))
+  const final = await parser.end()
+  expect(final.errors).toEqual([{ at: 'main', message: 'missing child "toString"' }])
+  expect(final.spec!.elements.main.children).toEqual(['stat'])
+})

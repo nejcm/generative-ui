@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { models } from '../models.ts'
-import { cost } from './cost.ts'
+import { batchUsd, cost, usd } from './cost.ts'
 
 const haiku = models.find((m) => m.id === 'claude-haiku-5-5')!
 const groq = models.find((m) => m.id === 'groq-gpt-oss-20b')!
@@ -16,4 +16,11 @@ test('bills cached input at the cached rate', () => {
 
 test('falls back to the input rate when no cached price is listed', () => {
   expect(cost(groq, { inputTokens: 1_000_000, outputTokens: 0, cachedInputTokens: 500_000 })).toBeCloseTo(0.075, 9)
+})
+
+test('unknown run cost shows a dash; batch sums mark unknown parts with ≥', () => {
+  expect(usd(null)).toBe('–')
+  expect(usd(0.0012)).toBe('$0.0012')
+  expect(batchUsd([0.001, null])).toBe('≥$0.0010')
+  expect(batchUsd([0.001, 0.002])).toBe('$0.0030')
 })

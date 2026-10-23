@@ -28,7 +28,7 @@ function createParser(): Parser {
     if (top === 'root') {
       if (typeof next.root !== 'string') return 'root must be an element id'
     } else if (top === 'elements' && id) {
-      const error = id in next.elements ? (validateElement(next.elements[id]) ?? (createsCycle(next.elements, id) ? 'children form a cycle' : undefined)) : undefined
+      const error = Object.hasOwn(next.elements, id) ? (validateElement(next.elements[id]) ?? (createsCycle(next.elements, id) ? 'children form a cycle' : undefined)) : undefined
       if (error) {
         rejected.add(id)
         return error
@@ -49,7 +49,7 @@ function createParser(): Parser {
     if (error) errors.push({ at: `line ${lineNo}`, message: error })
   }
 
-  const state = () => ({ spec, renderable: Boolean(spec.elements[spec.root]), errors: [...errors] })
+  const state = () => ({ spec, renderable: Object.hasOwn(spec.elements, spec.root), errors: [...errors] })
 
   return {
     async push(chunk) {
