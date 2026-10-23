@@ -1,7 +1,9 @@
+import { fileURLToPath } from 'node:url'
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { models, type Provider } from '../src/models.ts'
 import { run } from './run.ts'
+import { runsApi } from './runs.ts'
 
 const keyEnv: Record<Provider, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
@@ -14,5 +16,6 @@ export const app = new Hono()
   .get('/api/health', (c) => c.json({ ok: true }))
   .get('/api/models', (c) => c.json(models.filter((m) => process.env[keyEnv[m.provider]])))
   .post('/api/run', run)
+  .route('/api/runs', runsApi(fileURLToPath(new URL('../runs', import.meta.url))))
 
 if (import.meta.main) serve({ fetch: app.fetch, port: 8787 }, ({ port }) => console.log(`API on :${port}`))

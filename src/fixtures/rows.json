@@ -1,0 +1,8 @@
+[
+  { "id": 1041, "customer": "Ada Lovelace", "status": "paid", "amount": 240.0, "date": "2026-10-02" },
+  { "id": 1042, "customer": "Linus Torvalds", "status": "pending", "amount": 89.5, "date": "2026-10-03" },
+  { "id": 1043, "customer": "Grace Hopper", "status": "refunded", "amount": 120.0, "date": "2026-10-05" },
+  { "id": 1044, "customer": "Alan Turing", "status": "paid", "amount": 310.25, "date": "2026-10-08" },
+  { "id": 1045, "customer": "Margaret Hamilton", "status": "paid", "amount": 64.0, "date": "2026-10-11" },
+  { "id": 1046, "customer": "Ken Thompson", "status": "pending", "amount": 199.99, "date": "2026-10-14" }
+]

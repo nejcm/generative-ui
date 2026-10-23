@@ -1,0 +1,8 @@
+{
+  "persona": { "name": "Mira Kovač", "role": "Product designer", "city": "Ljubljana" },
+  "projects": [
+    { "title": "Transit app redesign", "year": 2026, "summary": "Cut trip-planning taps from 7 to 3 for 400k riders.", "tags": ["mobile", "research"] },
+    { "title": "Clinic booking system", "year": 2025, "summary": "Self-serve booking that halved front-desk calls.", "tags": ["web", "service design"] },
+    { "title": "Open data dashboard", "year": 2024, "summary": "City budget explorer used by 30k residents.", "tags": ["data viz"] }
+  ]
+}

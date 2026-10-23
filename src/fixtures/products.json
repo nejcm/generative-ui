@@ -1,0 +1,5 @@
+[
+  { "name": "Aero 14", "price": 1299, "weightKg": 1.2, "batteryH": 18, "screen": "14\" OLED", "rating": 4.6 },
+  { "name": "Forge 16", "price": 1899, "weightKg": 2.1, "batteryH": 9, "screen": "16\" IPS 165Hz", "rating": 4.4 },
+  { "name": "Nimbus 13", "price": 999, "weightKg": 1.0, "batteryH": 22, "screen": "13\" IPS", "rating": 4.2 }
+]

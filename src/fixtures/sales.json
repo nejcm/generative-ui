@@ -1,0 +1,16 @@
+{
+  "period": "2026-Q3",
+  "currency": "EUR",
+  "totals": { "revenue": 184200, "orders": 2310, "avgOrder": 79.7, "returningCustomers": 0.42 },
+  "weekly": [
+    { "week": "W27", "revenue": 12100 }, { "week": "W28", "revenue": 13350 }, { "week": "W29", "revenue": 12800 },
+    { "week": "W30", "revenue": 14920 }, { "week": "W31", "revenue": 15400 }, { "week": "W32", "revenue": 13900 },
+    { "week": "W33", "revenue": 16210 }, { "week": "W34", "revenue": 17030 }
+  ],
+  "byChannel": [ { "channel": "Web", "revenue": 98100 }, { "channel": "Mobile", "revenue": 61400 }, { "channel": "Retail", "revenue": 24700 } ],
+  "topProducts": [
+    { "name": "Trail Runner 3", "units": 412, "revenue": 45320 },
+    { "name": "Rain Shell", "units": 288, "revenue": 37440 },
+    { "name": "Merino Tee", "units": 905, "revenue": 31675 }
+  ]
+}
