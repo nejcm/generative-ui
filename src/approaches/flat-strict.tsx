@@ -1,6 +1,6 @@
 import type { Spec } from '@json-render/core'
 import { parsePartialJson } from 'ai'
-import { finalSpecErrors, SpecView, validateElement } from '@/catalog/catalog'
+import { createsCycle, finalSpecErrors, SpecView, validateElement } from '@/catalog/catalog'
 import { componentProps, type ComponentName } from '@/catalog/schema'
 import { fixtureBlock, stripFences, type Approach, type ParseError, type ParseState, type Parser } from './types'
 
@@ -48,28 +48,53 @@ const tryJson = (text: string): unknown => {
   }
 }
 
+type Kv = { key: string; value: string }
+const isKv = (e: unknown): e is Kv => typeof (e as Kv)?.key === 'string' && typeof (e as Kv)?.value === 'string'
+
+const wireError = ({ props, children }: FlatElement) =>
+  !Array.isArray(props) || !props.every(isKv)
+    ? 'props must be a list of {key, value} strings'
+    : !Array.isArray(children) || !children.every((c) => typeof c === 'string')
+      ? 'children must be a list of element ids'
+      : undefined
+
+// Number of objects closed directly inside the `elements` array, i.e. elements that finished streaming.
+export function closedElements(text: string) {
+  let depth = 0
+  let inString = false
+  let closed = 0
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inString) {
+      if (ch === '\\') i++
+      else if (ch === '"') inString = false
+    } else if (ch === '"') inString = true
+    else if (ch === '{' || ch === '[') depth++
+    else if (ch === '}' || ch === ']') {
+      if (ch === '}' && depth === 3) closed++
+      depth--
+    }
+  }
+  return closed
+}
+
 // Values are strings on the wire; use the JSON-decoded value only where the prop schema accepts it.
-function toProps(type: unknown, entries: unknown[]): Record<string, unknown> {
+function toProps(type: unknown, entries: Kv[]): Record<string, unknown> {
   const shape: Record<string, { safeParse(v: unknown): { success: boolean } }> =
     componentProps[type as ComponentName]?.shape ?? {}
-  const pairs = entries.filter(
-    (e): e is { key: string; value: string } =>
-      typeof (e as { key?: unknown })?.key === 'string' && typeof (e as { value?: unknown })?.value === 'string',
-  )
   return Object.fromEntries(
-    pairs.map(({ key, value }) => {
+    entries.map(({ key, value }) => {
       const decoded = tryJson(value)
       return [key, decoded !== undefined && shape[key]?.safeParse(decoded).success ? decoded : value]
     }),
   )
 }
 
-export function flatToSpec(value: unknown, { complete, final }: { complete: boolean; final: boolean }): ParseState {
+export function flatToSpec(value: unknown, { complete, closed, final }: { complete: boolean; closed: number; final: boolean }): ParseState {
   const errors: ParseError[] = []
   const flat = (typeof value === 'object' && value !== null ? value : {}) as { root?: unknown; elements?: unknown }
   const list: FlatElement[] = Array.isArray(flat.elements) ? flat.elements : []
-  // Until the JSON closes, the last element may still be streaming.
-  const ready = complete ? list : list.slice(0, -1)
+  const ready = complete ? list : list.slice(0, closed)
   const elements: Spec['elements'] = {}
   const seen = new Set<string>()
   const rejected = new Set<string>()
@@ -78,13 +103,20 @@ export function flatToSpec(value: unknown, { complete, final }: { complete: bool
     if (typeof raw?.id !== 'string') return errors.push({ at: `elements[${i}]`, message: 'element has no string id' })
     if (seen.has(raw.id)) return errors.push({ at: raw.id, message: 'duplicate id' })
     seen.add(raw.id)
-    const children = Array.isArray(raw.children) ? raw.children.filter((c) => typeof c === 'string') : []
-    const element = { type: String(raw.type), props: Array.isArray(raw.props) ? toProps(raw.type, raw.props) : {}, children }
-    const error = Array.isArray(raw.props) ? validateElement(element) : 'props must be a list of {key, value}'
+    const wire = wireError(raw)
+    const element = wire ? undefined : { type: String(raw.type), props: toProps(raw.type, raw.props as Kv[]), children: raw.children as string[] }
+    let error = wire ?? validateElement(element)
+    if (!error) {
+      elements[raw.id] = element!
+      if (createsCycle(elements, raw.id)) {
+        delete elements[raw.id]
+        error = 'children form a cycle'
+      }
+    }
     if (error) {
       rejected.add(raw.id)
       errors.push({ at: raw.id, message: error })
-    } else elements[raw.id] = element
+    }
   })
 
   const root = typeof flat.root === 'string' && (complete || 'elements' in flat) ? flat.root : ''
@@ -102,8 +134,9 @@ function createParser(): Parser {
   let text = ''
   // shortcut: re-parses the whole text on every chunk (O(n²)), fine for few-KB outputs; go incremental if it shows in TTFR
   const parse = async (final: boolean) => {
-    const { value, state } = await parsePartialJson(stripFences(text))
-    return flatToSpec(value, { complete: state === 'successful-parse', final })
+    const json = stripFences(text)
+    const { value, state } = await parsePartialJson(json)
+    return flatToSpec(value, { complete: state === 'successful-parse', closed: closedElements(json), final })
   }
   return {
     push(chunk) {

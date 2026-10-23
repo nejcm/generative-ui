@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { catalog } from '@/catalog/catalog'
-import { flatStrict, flatToSpec, PROPS_VARIANT } from './flat-strict'
+import { closedElements, flatStrict, flatToSpec, PROPS_VARIANT } from './flat-strict'
 import { replay } from './replay'
 
 const kv = (props: Record<string, unknown>) =>
@@ -45,22 +45,22 @@ describe.each(seeds)('flat-strict parser, seed %i', (seed) => {
 describe('flatToSpec', () => {
   test('keeps not-yet-streamed children while streaming and drops dangling ones at the end', () => {
     const value = { root: 'main', elements: [el.main(['stat', 'later']), el.stat] }
-    expect(flatToSpec(value, { complete: true, final: false }).spec!.elements.main.children).toEqual(['stat', 'later'])
-    const final = flatToSpec(value, { complete: true, final: true })
+    expect(flatToSpec(value, { complete: true, closed: 0, final: false }).spec!.elements.main.children).toEqual(['stat', 'later'])
+    const final = flatToSpec(value, { complete: true, closed: 0, final: true })
     expect(final.spec!.elements.main.children).toEqual(['stat'])
     expect(final.errors).toEqual([{ at: 'main', message: 'missing child "later"' }])
   })
 
   test('rejects duplicate ids and non-list props', () => {
     const value = { root: 'main', elements: [el.main([]), el.main([]), { id: 'x', type: 'Text', props: { text: 'hi' }, children: [] }] }
-    expect(flatToSpec(value, { complete: true, final: false }).errors).toEqual([
+    expect(flatToSpec(value, { complete: true, closed: 0, final: false }).errors).toEqual([
       { at: 'main', message: 'duplicate id' },
-      { at: 'x', message: 'props must be a list of {key, value}' },
+      { at: 'x', message: 'props must be a list of {key, value} strings' },
     ])
   })
 
   test('does not trust a root that may still be streaming', () => {
-    expect(flatToSpec({ root: 'ma' }, { complete: false, final: false }).spec!.root).toBe('')
+    expect(flatToSpec({ root: 'ma' }, { complete: false, closed: 0, final: false }).spec!.root).toBe('')
   })
 })
 
@@ -74,4 +74,46 @@ test('strict schema stays within Anthropic limits: no unions, no optional params
   const json = JSON.stringify(flatStrict.output)
   expect(json).not.toContain('anyOf')
   expect(json).not.toMatch(/"type":\[/)
+})
+
+describe('review regressions', () => {
+  const parse = async (text: string) => {
+    const parser = flatStrict.createParser()
+    await parser.push(text)
+    return parser.end()
+  }
+
+  test('a finished last element survives truncation after it', async () => {
+    const full = doc(el.main(['stat']), el.stat)
+    for (const cut of [full.slice(0, -1), full.slice(0, -2), full.slice(0, full.lastIndexOf('}', full.length - 3) + 1) + ',']) {
+      const final = await parse(cut)
+      expect(Object.keys(final.spec!.elements)).toEqual(['main', 'stat'])
+      expect(final.errors.map((e) => e.message)).toEqual(['JSON is truncated or invalid'])
+    }
+  })
+
+  test('an element still streaming is held back', async () => {
+    const full = doc(el.main(['stat']), el.stat)
+    const parser = flatStrict.createParser()
+    const state = await parser.push(full.slice(0, full.indexOf('"Revenue"')))
+    expect(Object.keys(state.spec!.elements)).toEqual(['main'])
+  })
+
+  test('closedElements ignores braces inside strings', () => {
+    expect(closedElements('{"root":"a","elements":[{"id":"a","props":[{"key":"t","value":"}}\\"{"}]},{"id":"b"')).toBe(1)
+  })
+
+  test('malformed prop entries and children reject the element instead of being dropped', async () => {
+    const badProp = { id: 'bad', type: 'Card', props: [{ key: 'title', value: 42 }], children: [] }
+    const badChildren = { id: 'bad2', type: 'Card', props: [], children: 'x' }
+    const final = await parse(doc(el.main(['stat', 'bad', 'bad2']), el.stat, badProp, badChildren))
+    expect(final.errors.map((e) => e.at)).toEqual(['bad', 'bad2'])
+    expect(final.spec!.elements.main.children).toEqual(['stat'])
+  })
+
+  test('a child cycle is rejected and counted once', async () => {
+    const final = await parse(doc(el.main(['loop']), { id: 'loop', type: 'Stack', props: [], children: ['main'] }))
+    expect(final.errors).toEqual([{ at: 'loop', message: 'children form a cycle' }])
+    expect(final.spec!.elements.main.children).toEqual([])
+  })
 })

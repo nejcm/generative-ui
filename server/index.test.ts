@@ -48,6 +48,7 @@ test('POST /api/run streams deltas, usage and done as NDJSON', async () => {
   mock.model = model
   const res = await post(runBody({ kind: 'json-schema', schema: { type: 'object' } }))
   expect(res.headers.get('content-type')).toBe('application/x-ndjson')
+  expect(res.headers.get('x-strict-output')).toBe('true')
   const events: RunEvent[] = []
   for await (const e of readNdjson(res.body!)) events.push(e)
   expect(events.slice(0, 3)).toEqual([
@@ -90,4 +91,12 @@ test('a model error ends the stream with a single error event', async () => {
 test('POST /api/run rejects an unknown model', async () => {
   const res = await post(JSON.stringify({ ...JSON.parse(runBody()), modelId: 'nope' }))
   expect(res.status).toBe(400)
+})
+
+test('mutating routes reject foreign origins and non-JSON bodies', async () => {
+  const req = (headers: Record<string, string>) => app.request('http://localhost:5173/api/runs/x', { method: 'PATCH', headers, body: '{}' })
+  expect((await req({ 'content-type': 'application/json', origin: 'http://localhost:3000', host: 'localhost:5173' })).status).toBe(403)
+  expect((await req({ 'content-type': 'application/json', origin: 'null', host: 'localhost:5173' })).status).toBe(403)
+  expect((await req({ 'content-type': 'text/plain', host: 'localhost:5173' })).status).toBe(415)
+  expect((await req({ 'content-type': 'application/json', origin: 'http://localhost:5173', host: 'localhost:5173' })).status).toBe(404)
 })

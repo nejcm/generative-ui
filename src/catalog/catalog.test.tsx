@@ -1,7 +1,7 @@
 import { renderToString } from 'react-dom/server'
 import { expect, test } from 'vitest'
 import { CatalogPreview, previewSpec } from '@/ui/CatalogPreview'
-import { catalog, validateElement } from './catalog'
+import { catalog, SpecView, validateElement } from './catalog'
 import { componentProps, type ComponentName } from './schema'
 
 test.each(Object.keys(componentProps) as ComponentName[])('%s schema accepts its sample props', (name) => {
@@ -24,4 +24,14 @@ test('validateElement checks literal props but lets expressions through', () => 
   expect(validateElement({ type: 'Stat', props: { label: 'Users' } })).toMatch(/Stat props/)
   expect(validateElement({ type: 'Marquee', props: {} })).toMatch(/unknown component/)
   expect(validateElement({ type: 'Image', props: { src: 'javascript:alert(1)', alt: '' } })).toMatch(/Image props/)
+})
+
+test('state-bound props render from the initial state and invalid resolved props show a marker', () => {
+  const spec = (state: Record<string, unknown>) => ({
+    root: 't',
+    elements: { t: { type: 'Table', props: { columns: ['Name'], rows: { $state: '/rows' } }, children: [] } },
+    state,
+  })
+  expect(renderToString(<SpecView spec={spec({ rows: [['Ada']] })} />)).toContain('Ada')
+  expect(renderToString(<SpecView spec={spec({ rows: 'nope' })} />)).toContain('invalid Table props')
 })

@@ -70,3 +70,36 @@ test('system prompt is the catalog prompt plus the fixture', async () => {
   expect(prompt.startsWith(catalog.prompt())).toBe(true)
   expect(prompt).toContain('"sales"')
 })
+
+describe('review regressions', () => {
+  const parse = async (...patches: object[]) => {
+    const parser = jsonRender.createParser()
+    await parser.push(jsonl(...patches))
+    return parser.end()
+  }
+  const ok = lines.root
+  const main = lines.main([])
+
+  test('prototype paths are rejected and never reach Object.prototype', async () => {
+    const final = await parse(ok, main, { op: 'add', path: '/state/__proto__/polluted', value: 'yes' }, { op: 'copy', from: '/__proto__', path: '/state/x' })
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+    expect(final.errors.map((e) => e.message)).toEqual([expect.stringContaining('unsafe path'), expect.stringContaining('unsafe path')])
+    expect(final.renderable).toBe(true)
+  })
+
+  test.each([
+    ['null element', null],
+    ['null props', { type: 'Text', props: null, children: [] }],
+    ['inherited type name', { type: 'toString', props: {}, children: [] }],
+  ])('%s is one error and the rest still renders', async (_, value) => {
+    const final = await parse(ok, lines.main(['x']), { op: 'add', path: '/elements/x', value })
+    expect(final.errors).toHaveLength(1)
+    expect(final.renderable).toBe(true)
+  })
+
+  test('a patch that closes a child cycle is rejected', async () => {
+    const final = await parse(ok, lines.main(['loop']), { op: 'add', path: '/elements/loop', value: { type: 'Stack', props: {}, children: ['main'] } })
+    expect(final.errors).toEqual([{ at: 'line 3', message: 'children form a cycle' }])
+    expect(final.spec!.elements.loop).toBeUndefined()
+  })
+})

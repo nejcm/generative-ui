@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test } from 'vitest'
@@ -25,6 +25,7 @@ const run = (over: Partial<Run> = {}): Run => ({
   system: 'sys',
   systemHash: 'a'.repeat(64),
   systemOverridden: false,
+  strictOutput: false,
   rawOutput: '<p>hi</p>',
   metrics: { ttftMs: 100, ttfrMs: 150, totalMs: 900, inputTokens: 10, outputTokens: 20, costUsd: 0.001, valid: true, errorCount: 0, errors: [], aborted: false },
   ...over,
@@ -79,4 +80,17 @@ test('path traversal in :id never reaches the filesystem', async () => {
     expect((await api.request(`/${id}`)).status).toBe(404)
     expect((await send('PATCH', `/${id}`, { rating: 1 })).status).toBe(404)
   }
+})
+
+test('overlapping PATCHes both land', async () => {
+  await send('POST', '/', run())
+  const results = await Promise.all([send('PATCH', '/r1', { notes: 'n' }), send('PATCH', '/r1', { rating: 3 })])
+  expect(results.map((r) => r.status)).toEqual([200, 200])
+  expect(await (await api.request('/r1')).json()).toMatchObject({ notes: 'n', rating: 3 })
+})
+
+test('an unreadable run file does not break the listing', async () => {
+  await send('POST', '/', run())
+  await writeFile(join(dir, 'runs', '2026-10-25T00-00-00-000Z-broken.json'), '{"id":')
+  expect(await list()).toEqual(['r1'])
 })

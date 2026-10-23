@@ -8,6 +8,11 @@ import { presets } from '@/prompts'
 import { Choice } from './Choice'
 import { Result } from './Result'
 
+const usd = (costs: (number | null)[]) => {
+  const known = costs.filter((c) => c !== null)
+  return `${known.length < costs.length ? '≥' : ''}$${known.reduce((a, b) => a + b, 0).toFixed(4)}`
+}
+
 const getJson = async <T,>(url: string): Promise<T> => {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -37,6 +42,8 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
     onOpenBatch(await Promise.all(batch.slice(0, 4).reverse().map((r) => getJson<Run>(`/api/runs/${r.id}`))))
   }
 
+  const batchCost = (batchId: string) => usd(runs!.filter((r) => r.batchId === batchId).map((r) => r.metrics.costUsd))
+
   const act = (fn: () => Promise<void>) => () => fn().catch((e: Error) => setError(e.message))
 
   return (
@@ -48,7 +55,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
       <Table>
         <TableHeader>
           <TableRow>
-            {['When', 'Preset', 'Approach', 'Model', 'TTFR', 'Cost', 'Errors', 'Rating', ''].map((h) => (
+            {['When', 'Preset', 'Approach', 'Model', 'TTFR', 'Cost', 'Batch cost', 'Errors', 'Rating', ''].map((h) => (
               <TableHead key={h}>{h}</TableHead>
             ))}
           </TableRow>
@@ -61,7 +68,8 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
               <TableCell>{approachById(r.approach)?.label ?? r.approach}</TableCell>
               <TableCell>{models.find((m) => m.id === r.modelId)?.label ?? r.modelId}</TableCell>
               <TableCell className="tabular-nums">{r.metrics.ttfrMs == null ? '–' : `${(r.metrics.ttfrMs / 1000).toFixed(2)}s`}</TableCell>
-              <TableCell className="tabular-nums">${r.metrics.costUsd.toFixed(4)}</TableCell>
+              <TableCell className="tabular-nums">{usd([r.metrics.costUsd])}</TableCell>
+              <TableCell className="tabular-nums">{batchCost(r.batchId)}</TableCell>
               <TableCell>{r.metrics.aborted ? 'aborted' : r.metrics.errorCount}</TableCell>
               <TableCell>{r.rating ?? '–'}</TableCell>
               <TableCell>
@@ -84,7 +92,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
       {selected && (
         <section className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">{selected.run.prompt}</p>
-          <Result approach={selected.approach} state={selected.state} errors={selected.run.metrics.errors} />
+          <Result key={selected.run.id} approach={selected.approach} state={selected.state} errors={selected.run.metrics.errors} />
         </section>
       )}
     </div>

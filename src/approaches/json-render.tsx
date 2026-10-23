@@ -1,6 +1,9 @@
 import { applySpecStreamPatch, parseSpecStreamLine, type Spec, type SpecStreamLine } from '@json-render/core'
-import { finalSpecErrors, SpecView, validateElement } from '@/catalog/catalog'
+import { createsCycle, finalSpecErrors, SpecView, validateElement } from '@/catalog/catalog'
 import { fixtureBlock, type Approach, type ParseError, type Parser } from './types'
+
+// The pinned core walks inherited keys, so these would write to Object.prototype.
+const unsafeTokens = new Set(['__proto__', 'prototype', 'constructor'])
 
 // Not createSpecStreamCompiler: its push() applies patches before we can validate them and silently drops bad lines.
 function createParser(): Parser {
@@ -11,6 +14,8 @@ function createParser(): Parser {
   const rejected = new Set<string>()
 
   const apply = (patch: SpecStreamLine): string | undefined => {
+    if ([patch.path, patch.from].some((p) => p?.split('/').some((token) => unsafeTokens.has(token))))
+      return `unsafe path ${patch.path}`
     const next = structuredClone(spec)
     try {
       applySpecStreamPatch(next as unknown as Record<string, unknown>, patch)
@@ -21,7 +26,7 @@ function createParser(): Parser {
     if (top === 'root') {
       if (typeof next.root !== 'string') return 'root must be an element id'
     } else if (top === 'elements' && id) {
-      const error = next.elements[id] && validateElement(next.elements[id])
+      const error = id in next.elements ? (validateElement(next.elements[id]) ?? (createsCycle(next.elements, id) ? 'children form a cycle' : undefined)) : undefined
       if (error) {
         rejected.add(id)
         return error

@@ -2,6 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- Embedder frame-src governs navigations inside the generated-HTML iframe; srcdoc itself is not fetched. -->
+    <meta http-equiv="Content-Security-Policy" content="frame-src 'none'" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Generative UI playground</title>

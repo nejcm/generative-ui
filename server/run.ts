@@ -34,6 +34,7 @@ export async function run(c: Context) {
 
   // Fires when the client disconnects (@hono/node-server aborts the request on premature close).
   const signal = c.req.raw.signal
+  const strict = output.kind === 'json-schema' && model.supports.strictJson
   const started = performance.now()
   const result = streamText({
     model: providers[model.provider](model.modelName),
@@ -41,7 +42,7 @@ export async function run(c: Context) {
     prompt,
     temperature: model.supports.temperature ? settings.temperature : undefined,
     reasoning: settings.effort && model.supports.effort?.includes(settings.effort) ? settings.effort : undefined,
-    ...(output.kind === 'json-schema' && model.supports.strictJson && {
+    ...(strict && {
       output: Output.object({ schema: jsonSchema(output.schema as JSONSchema7) }),
     }),
     maxRetries: 0, // retries would distort TTFT and total time
@@ -79,7 +80,7 @@ export async function run(c: Context) {
       controller.close()
     },
   })
-  return new Response(body, { headers: { 'content-type': 'application/x-ndjson' } })
+  return new Response(body, { headers: { 'content-type': 'application/x-ndjson', 'x-strict-output': String(strict) } })
 }
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))

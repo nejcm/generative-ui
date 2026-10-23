@@ -19,6 +19,11 @@ type Impl<K extends ComponentName> = (ctx: BaseComponentProps<PropsOf<K>>) => Re
 function useValue(propValue: string | undefined, bindingPath: string | undefined) {
   const [bound, setBound] = useBoundProp(propValue, bindingPath)
   const [local, setLocal] = useState(propValue)
+  const [lastProp, setLastProp] = useState(propValue)
+  if (propValue !== lastProp) {
+    setLastProp(propValue)
+    setLocal(propValue)
+  }
   return bindingPath ? ([bound, setBound] as const) : ([local, setLocal] as const)
 }
 

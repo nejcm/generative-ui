@@ -47,6 +47,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
   const [saved, setSaved] = useState<Pick<Run, 'id' | 'rating' | 'notes'>>()
   const [notice, setNotice] = useState('')
   const [running, setRunning] = useState(false)
+  const [runKey, setRunKey] = useState('')
   const controllerRef = useRef<AbortController>(undefined)
   const seenBatch = useRef(batch)
 
@@ -69,11 +70,13 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
     let state: ParseState = { renderable: false, errors: [] }
     let rawOutput = ''
     let ttfrMs: number | null = null
-    let usage: Usage = { inputTokens: 0, outputTokens: 0 }
+    let usage: Usage | undefined
+    let strictOutput = false
     let done: Extract<RunEvent, { t: 'done' }> | undefined
     let failure: string | undefined
 
     setRunning(true)
+    setRunKey(id)
     setResult({ approach, state })
     setMetrics({})
     setSaved(undefined)
@@ -86,6 +89,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
         body: JSON.stringify({ runId: id, modelId: model.id, settings, system, prompt: req.prompt, output: approach.output }),
         signal: controller.signal,
       })
+      strictOutput = res.headers.get('x-strict-output') === 'true'
       if (!res.ok || !res.body) throw new Error((await res.json().catch(() => null))?.error ?? `HTTP ${res.status}`)
       for await (const event of readNdjson(res.body)) {
         if (event.t === 'delta') {
@@ -103,7 +107,8 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
     } catch (e) {
       if (!controller.signal.aborted) failure = message(e)
     }
-    state = await parser.end()
+    state = await parser.end().catch((e: unknown) => ({ ...state, errors: [...state.errors, { at: 'parser', message: message(e) }] }))
+    if (state.renderable && ttfrMs === null) ttfrMs = performance.now() - started
     const errors = failure ? [...state.errors, { at: 'transport', message: failure }] : state.errors
     const aborted = controller.signal.aborted
     const run: Run = {
@@ -119,15 +124,15 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
       system,
       systemHash: await sha256(system),
       systemOverridden: config.systemOverride !== undefined,
+      strictOutput,
       rawOutput,
       metrics: {
         ttftMs: done?.ttftMs ?? null,
         ttfrMs,
         totalMs: done?.totalMs ?? performance.now() - started,
-        // shortcut: an aborted stream never gets usage, so tokens/cost read 0; estimate from rawOutput if spend tracking needs it.
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        costUsd: cost(model, usage),
+        inputTokens: usage?.inputTokens ?? null,
+        outputTokens: usage?.outputTokens ?? null,
+        costUsd: usage ? cost(model, usage) : null,
         valid: !aborted && errors.length === 0,
         errorCount: errors.length,
         errors,
@@ -168,6 +173,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
     if (!loaded) return
     const shown = approachById(loaded.approach)!
     parseAll(shown, loaded.rawOutput).then((state) => {
+      setRunKey(loaded.id)
       setResult({ approach: shown, state })
       setMetrics(loaded.metrics)
       setSaved({ id: loaded.id, rating: loaded.rating, notes: loaded.notes })
@@ -236,7 +242,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
       <CardContent className="flex flex-col gap-3">
         <MetricsStrip metrics={metrics} saved={saved} onRate={(rating) => patch({ rating })} onNotes={(notes) => patch({ notes })} />
         {notice && <p className="text-xs text-destructive">{notice}</p>}
-        {result && <Result approach={result.approach} state={result.state} errors={metrics.errors ?? result.state.errors} />}
+        {result && <Result key={runKey} approach={result.approach} state={result.state} errors={metrics.errors ?? result.state.errors} />}
       </CardContent>
     </Card>
   )

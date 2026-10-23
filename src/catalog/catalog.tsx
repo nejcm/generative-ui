@@ -1,8 +1,8 @@
 import { createStateStore, defineCatalog, getByPath, type Spec, type UIElement } from '@json-render/core'
 import { flattenToPointers, immutableSetByPath } from '@json-render/core/store-utils'
-import { defineRegistry, JSONUIProvider, Renderer, type SetState } from '@json-render/react'
+import { defineRegistry, JSONUIProvider, Renderer, type BaseComponentProps, type SetState } from '@json-render/react'
 import { schema } from '@json-render/react/schema'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FC } from 'react'
 import { z } from 'zod'
 import { components } from './components'
 import { componentProps, type ComponentName } from './schema'
@@ -87,8 +87,18 @@ export const catalog = defineCatalog(schema, {
   },
 })
 
+// Expression props resolve at render time; a resolved value that fails its schema shows a marker instead of crashing.
+const guarded = Object.fromEntries(
+  (Object.keys(components) as ComponentName[]).map((name) => {
+    const Impl = components[name] as FC<BaseComponentProps<Record<string, unknown>>>
+    const Guarded = (ctx: BaseComponentProps<Record<string, unknown>>) =>
+      componentProps[name].safeParse(ctx.props).success ? <Impl {...ctx} /> : <span className="text-xs text-destructive">{`invalid ${name} props`}</span>
+    return [name, Guarded]
+  }),
+) as unknown as typeof components
+
 const { registry, handlers } = defineRegistry(catalog, {
-  components,
+  components: guarded,
   actions: {
     toggle: async (params, setState) =>
       params && setState((prev) => immutableSetByPath(prev, params.statePath, !getByPath(prev, params.statePath))),
@@ -100,7 +110,8 @@ const isExpression = (v: unknown) => typeof v === 'object' && v !== null && !Arr
 export function validateElement(element: unknown): string | undefined {
   if (typeof element !== 'object' || element === null) return 'element is not an object'
   const { type, props = {}, children } = element as Partial<UIElement>
-  if (!type || !(type in componentProps)) return `unknown component type: ${String(type)}`
+  if (typeof type !== 'string' || !Object.hasOwn(componentProps, type)) return `unknown component type: ${String(type)}`
+  if (typeof props !== 'object' || props === null || Array.isArray(props)) return 'props must be an object'
   if (children !== undefined && !(Array.isArray(children) && children.every((c) => typeof c === 'string')))
     return 'children must be an array of element ids'
   // Expressions ($state, $bindState, $cond…) resolve at render time, so only literal props are checked.
@@ -110,6 +121,19 @@ export function validateElement(element: unknown): string | undefined {
   const propsSchema = z.object(Object.fromEntries(Object.entries(shape).map(([k, s]) => [k, exprKeys.includes(k) ? z.optional(s) : s])))
   const result = propsSchema.safeParse(literal)
   return result.success ? undefined : `${type} props: ${z.prettifyError(result.error)}`
+}
+
+export function createsCycle(elements: Spec['elements'], id: string) {
+  const stack = [...(elements[id]?.children ?? [])]
+  const seen = new Set<string>()
+  while (stack.length) {
+    const next = stack.pop()!
+    if (next === id) return true
+    if (seen.has(next)) continue
+    seen.add(next)
+    stack.push(...(elements[next]?.children ?? []))
+  }
+  return false
 }
 
 // End-of-stream checks. Children pointing at rejected elements were already counted when rejected.
@@ -123,7 +147,7 @@ export function finalSpecErrors(spec: Spec, rejected: Set<string>) {
 }
 
 export function SpecView({ spec, loading }: { spec: Spec | null; loading?: boolean }) {
-  const [store] = useState(() => createStateStore())
+  const [store] = useState(() => createStateStore(spec?.state))
   const [actionHandlers] = useState(() => {
     const setState: SetState = (updater) => {
       const prev = store.getSnapshot()
