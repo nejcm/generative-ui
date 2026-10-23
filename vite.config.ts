@@ -6,5 +6,6 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, 'src') } },
-  server: { proxy: { '/api': 'http://127.0.0.1:8787' } },
+  // Object form: Vite's string shorthand sets changeOrigin, which rewrites Host and breaks the API's same-origin check.
+  server: { proxy: { '/api': { target: 'http://127.0.0.1:8787' } } },
 })

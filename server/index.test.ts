@@ -100,3 +100,13 @@ test('mutating routes reject foreign origins and non-JSON bodies', async () => {
   expect((await req({ 'content-type': 'text/plain', host: 'localhost:5173' })).status).toBe(415)
   expect((await req({ 'content-type': 'application/json', origin: 'http://localhost:5173', host: 'localhost:5173' })).status).toBe(404)
 })
+
+test('the Vite proxy keeps Host, so proxied same-origin requests pass and rebinding hosts do not', async () => {
+  const { default: config } = await import('../vite.config.ts')
+  expect(config.server?.proxy?.['/api']).toEqual({ target: 'http://127.0.0.1:8787' })
+  const req = (origin: string, host: string) =>
+    app.request('/api/runs', { method: 'POST', headers: { 'content-type': 'application/json', origin, host }, body: '{}' })
+  expect((await req('http://localhost:5173', 'localhost:5173')).status).toBe(400)
+  expect((await req('http://localhost:5173', '127.0.0.1:8787')).status).toBe(403)
+  expect((await req('http://evil.test:8787', 'evil.test:8787')).status).toBe(403)
+})

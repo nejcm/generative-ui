@@ -12,8 +12,10 @@ const keyEnv: Record<Provider, string> = {
   groq: 'GROQ_API_KEY',
 }
 
+const loopback = new Set(['localhost', '127.0.0.1', '[::1]'])
+// Loopback Host also stops DNS-rebinding pages, whose Origin and Host match but name a foreign host.
 const sameOrigin = (origin: string | undefined, host: string | undefined) =>
-  !origin || (URL.canParse(origin) && new URL(origin).host === host)
+  !origin || (URL.canParse(origin) && new URL(origin).host === host && loopback.has(new URL(origin).hostname))
 
 export const app = new Hono()
   // Blocks drive-by requests from other sites/ports: foreign Origins, and non-JSON bodies that skip CORS preflight.
