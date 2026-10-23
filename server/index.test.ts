@@ -110,3 +110,10 @@ test('the Vite proxy keeps Host, so proxied same-origin requests pass and rebind
   expect((await req('http://localhost:5173', '127.0.0.1:8787')).status).toBe(403)
   expect((await req('http://evil.test:8787', 'evil.test:8787')).status).toBe(403)
 })
+
+test('originless requests still need a loopback Host', async () => {
+  const get = (host: string) => app.request('/api/health', { headers: { host } })
+  expect((await get('evil.test:8787')).status).toBe(403)
+  expect((await get('localhost:5173')).status).toBe(200)
+  expect((await get('127.0.0.1:8787')).status).toBe(200)
+})

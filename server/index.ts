@@ -13,14 +13,14 @@ const keyEnv: Record<Provider, string> = {
 }
 
 const loopback = new Set(['localhost', '127.0.0.1', '[::1]'])
-// Loopback Host also stops DNS-rebinding pages, whose Origin and Host match but name a foreign host.
-const sameOrigin = (origin: string | undefined, host: string | undefined) =>
-  !origin || (URL.canParse(origin) && new URL(origin).host === host && loopback.has(new URL(origin).hostname))
+// Loopback Host on every request stops DNS-rebinding pages, which send their own (foreign) Host with or without Origin.
+const allowed = (origin: string | undefined, host: string) =>
+  URL.canParse(`http://${host}`) && loopback.has(new URL(`http://${host}`).hostname) && (!origin || (URL.canParse(origin) && new URL(origin).host === host))
 
 export const app = new Hono()
   // Blocks drive-by requests from other sites/ports: foreign Origins, and non-JSON bodies that skip CORS preflight.
   .use('/api/*', async (c, next) => {
-    if (!sameOrigin(c.req.header('origin'), c.req.header('host'))) return c.json({ error: 'cross-origin request' }, 403)
+    if (!allowed(c.req.header('origin'), c.req.header('host') ?? new URL(c.req.url).host)) return c.json({ error: 'cross-origin request' }, 403)
     if (c.req.method !== 'GET' && !c.req.header('content-type')?.startsWith('application/json'))
       return c.json({ error: 'expected application/json' }, 415)
     await next()
