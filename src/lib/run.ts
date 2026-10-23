@@ -17,7 +17,7 @@ export const RunRecord = z.strictObject({
   system: z.string(),
   systemHash: z.string().regex(/^[0-9a-f]{64}$/),
   systemOverridden: z.boolean(),
-  strictOutput: z.boolean(),
+  strictOutput: z.boolean().nullable(),
   rawOutput: z.string(),
   metrics: z.strictObject({
     ttftMs: z.number().nullable(),
@@ -37,6 +37,11 @@ export const RunRecord = z.strictObject({
 })
 
 export const RunPatch = z.strictObject({ rating: z.int().min(1).max(5).optional(), notes: z.string().optional() })
+
+export const strictOutputOf = (headers: Headers) => {
+  const value = headers.get('x-strict-output')
+  return value === null ? null : value === 'true'
+}
 
 export type Run = z.infer<typeof RunRecord>
 export type RunSummary = Omit<Run, 'system' | 'rawOutput'>

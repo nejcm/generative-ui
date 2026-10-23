@@ -103,3 +103,51 @@ describe('review regressions', () => {
     expect(final.spec!.elements.loop).toBeUndefined()
   })
 })
+
+describe('round 2 regressions', () => {
+  const parse = async (...patches: object[]) => {
+    const parser = jsonRender.createParser()
+    await parser.push(jsonl(...patches))
+    return parser.end()
+  }
+
+  test('cycle check decodes the pointer token of the element id', async () => {
+    const final = await parse(
+      { op: 'add', path: '/root', value: 'a/b' },
+      { op: 'add', path: '/elements/a~1b', value: { type: 'Stack', props: {}, children: ['a/b'] } },
+    )
+    expect(final.errors).toEqual([{ at: 'line 2', message: 'children form a cycle' }, { at: 'root', message: 'root element "a/b" is missing' }])
+  })
+
+  test('a non-string path is one patch error and later patches still apply', async () => {
+    const final = await parse({ op: 'add', path: 42, value: 0 }, lines.root, lines.main([]))
+    expect(final.errors).toEqual([{ at: 'line 1', message: 'path and from must be strings' }])
+    expect(final.renderable).toBe(true)
+  })
+
+  const table = (rows: unknown) => [
+    { op: 'add', path: '/root', value: 't' },
+    { op: 'add', path: '/elements/t', value: { type: 'Table', props: { columns: ['Name'], rows: { $state: '/rows' } }, children: [] } },
+    { op: 'add', path: '/state/rows', value: rows },
+  ]
+
+  test('state-bound props are validated after resolution and counted', async () => {
+    expect((await parse(...table([['Ada']]))).errors).toEqual([])
+    const final = await parse(...table('nope'))
+    expect(final.errors).toHaveLength(1)
+    expect(final.errors[0]).toMatchObject({ at: 't', message: expect.stringContaining('after resolving state') })
+  })
+
+  test('repeat children resolve $item per item', async () => {
+    const list = (items: unknown[]) => [
+      { op: 'add', path: '/root', value: 'list' },
+      { op: 'add', path: '/elements/list', value: { type: 'Stack', props: {}, repeat: { statePath: '/items' }, children: ['item'] } },
+      { op: 'add', path: '/elements/item', value: { type: 'Text', props: { text: { $item: 'name' } }, children: [] } },
+      { op: 'add', path: '/state/items', value: items },
+    ]
+    expect((await parse(...list([{ name: 'a' }, { name: 'b' }]))).errors).toEqual([])
+    expect((await parse(...list([{ name: 'a' }, { name: 5 }, { name: 6 }]))).errors).toEqual([
+      { at: 'item', message: expect.stringContaining('after resolving state') },
+    ])
+  })
+})

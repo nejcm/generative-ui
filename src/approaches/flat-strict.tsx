@@ -58,24 +58,29 @@ const wireError = ({ props, children }: FlatElement) =>
       ? 'children must be a list of element ids'
       : undefined
 
-// Number of objects closed directly inside the `elements` array, i.e. elements that finished streaming.
-export function closedElements(text: string) {
-  let depth = 0
+// Count of leading `elements` items that finished streaming: items followed by a comma, plus a closed last
+// object/array. A primitive last item may still be growing (`12` → `123`), so it waits for the comma.
+export function completedElements(text: string) {
+  const stack: string[] = []
   let inString = false
-  let closed = 0
+  let commas = 0
+  let lastClosed = false
   for (let i = 0; i < text.length; i++) {
     const ch = text[i]
     if (inString) {
       if (ch === '\\') i++
       else if (ch === '"') inString = false
     } else if (ch === '"') inString = true
-    else if (ch === '{' || ch === '[') depth++
+    else if (ch === '{' || ch === '[') stack.push(ch)
     else if (ch === '}' || ch === ']') {
-      if (ch === '}' && depth === 3) closed++
-      depth--
+      if (stack.pop() === '[' && stack.length === 1) return Infinity
+      if (stack.length === 2) lastClosed = true
+    } else if (ch === ',' && stack.length === 2 && stack[1] === '[') {
+      commas++
+      lastClosed = false
     }
   }
-  return closed
+  return commas + (lastClosed ? 1 : 0)
 }
 
 // Values are strings on the wire; use the JSON-decoded value only where the prop schema accepts it.
@@ -136,7 +141,7 @@ function createParser(): Parser {
   const parse = async (final: boolean) => {
     const json = stripFences(text)
     const { value, state } = await parsePartialJson(json)
-    return flatToSpec(value, { complete: state === 'successful-parse', closed: closedElements(json), final })
+    return flatToSpec(value, { complete: state === 'successful-parse', closed: completedElements(json), final })
   }
   return {
     push(chunk) {

@@ -14,15 +14,17 @@ function createParser(): Parser {
   const rejected = new Set<string>()
 
   const apply = (patch: SpecStreamLine): string | undefined => {
-    if ([patch.path, patch.from].some((p) => p?.split('/').some((token) => unsafeTokens.has(token))))
-      return `unsafe path ${patch.path}`
+    const paths = [patch.path, patch.from].filter((p) => p !== undefined)
+    if (!paths.every((p) => typeof p === 'string')) return 'path and from must be strings'
+    if (paths.some((p) => p.split('/').some((token) => unsafeTokens.has(token)))) return `unsafe path ${patch.path}`
     const next = structuredClone(spec)
     try {
       applySpecStreamPatch(next as unknown as Record<string, unknown>, patch)
     } catch (e) {
       return `patch failed: ${e instanceof Error ? e.message : String(e)}`
     }
-    const [, top, id] = patch.path.split('/')
+    const [, top, token] = patch.path.split('/')
+    const id = token?.replace(/~1/g, '/').replace(/~0/g, '~')
     if (top === 'root') {
       if (typeof next.root !== 'string') return 'root must be an element id'
     } else if (top === 'elements' && id) {

@@ -94,3 +94,7 @@ test('an unreadable run file does not break the listing', async () => {
   await writeFile(join(dir, 'runs', '2026-10-25T00-00-00-000Z-broken.json'), '{"id":')
   expect(await list()).toEqual(['r1'])
 })
+
+test('a run with unknown strict output is accepted', async () => {
+  expect((await send('POST', '/', run({ strictOutput: null }))).status).toBe(201)
+})

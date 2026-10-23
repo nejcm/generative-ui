@@ -1,4 +1,13 @@
-import { createStateStore, defineCatalog, getByPath, type Spec, type UIElement } from '@json-render/core'
+import {
+  createStateStore,
+  defineCatalog,
+  getByPath,
+  resolveElementProps,
+  resolveRepeatStatePath,
+  type PropResolutionContext,
+  type Spec,
+  type UIElement,
+} from '@json-render/core'
 import { flattenToPointers, immutableSetByPath } from '@json-render/core/store-utils'
 import { defineRegistry, JSONUIProvider, Renderer, type BaseComponentProps, type SetState } from '@json-render/react'
 import { schema } from '@json-render/react/schema'
@@ -143,7 +152,28 @@ export function finalSpecErrors(spec: Spec, rejected: Set<string>) {
   for (const [id, element] of Object.entries(spec.elements))
     for (const child of element.children ?? [])
       if (!spec.elements[child] && !rejected.has(child)) errors.push({ at: id, message: `missing child "${child}"` })
-  return errors
+  return [...errors, ...resolvedPropErrors(spec)]
+}
+
+// Expression props validated against final state, once per repeat item in scope; first failure per element counts.
+function resolvedPropErrors(spec: Spec) {
+  const failures = new Map<string, string>()
+  const visit = (id: string, ctx: PropResolutionContext) => {
+    const element = spec.elements[id]
+    if (!element) return
+    const result = componentProps[element.type as ComponentName].safeParse(resolveElementProps(element.props ?? {}, ctx))
+    if (!result.success && !failures.has(id)) failures.set(id, `${element.type} props after resolving state: ${z.prettifyError(result.error)}`)
+    const children = element.children ?? []
+    if (!element.repeat) return children.forEach((child) => visit(child, ctx))
+    const path = resolveRepeatStatePath(element.repeat.statePath, ctx.repeatBasePath)
+    const items = path === undefined ? undefined : getByPath(ctx.stateModel, path)
+    if (Array.isArray(items))
+      items.forEach((repeatItem, repeatIndex) =>
+        children.forEach((child) => visit(child, { ...ctx, repeatItem, repeatIndex, repeatBasePath: `${path}/${repeatIndex}` })),
+      )
+  }
+  visit(spec.root, { stateModel: spec.state ?? {} })
+  return [...failures].map(([at, message]) => ({ at, message }))
 }
 
 export function SpecView({ spec, loading }: { spec: Spec | null; loading?: boolean }) {

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { cost, type Usage } from '@/lib/cost'
 import { sha256 } from '@/lib/hash'
 import { readNdjson, type RunEvent } from '@/lib/ndjson'
-import type { Run } from '@/lib/run'
+import { strictOutputOf, type Run } from '@/lib/run'
 import type { Effort, Model } from '@/models'
 import { fixtures } from '@/prompts'
 import { Choice } from './Choice'
@@ -71,7 +71,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
     let rawOutput = ''
     let ttfrMs: number | null = null
     let usage: Usage | undefined
-    let strictOutput = false
+    let strictOutput: boolean | null = null
     let done: Extract<RunEvent, { t: 'done' }> | undefined
     let failure: string | undefined
 
@@ -89,7 +89,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
         body: JSON.stringify({ runId: id, modelId: model.id, settings, system, prompt: req.prompt, output: approach.output }),
         signal: controller.signal,
       })
-      strictOutput = res.headers.get('x-strict-output') === 'true'
+      strictOutput = strictOutputOf(res.headers)
       if (!res.ok || !res.body) throw new Error((await res.json().catch(() => null))?.error ?? `HTTP ${res.status}`)
       for await (const event of readNdjson(res.body)) {
         if (event.t === 'delta') {

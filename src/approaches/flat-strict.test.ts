@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { catalog } from '@/catalog/catalog'
-import { closedElements, flatStrict, flatToSpec, PROPS_VARIANT } from './flat-strict'
+import { completedElements, flatStrict, flatToSpec, PROPS_VARIANT } from './flat-strict'
 import { replay } from './replay'
 
 const kv = (props: Record<string, unknown>) =>
@@ -12,7 +12,7 @@ const el = {
   bad: { id: 'bad', type: 'Chart', props: kv({ type: 'radar', data: [] }), children: [] },
   table: { id: 'table', type: 'Table', props: kv({ columns: ['Name', 'Sales'], rows: [['Ada', 120]] }), children: [] },
 }
-const doc = (...elements: object[]) => JSON.stringify({ root: 'main', elements })
+const doc = (...elements: unknown[]) => JSON.stringify({ root: 'main', elements })
 const seeds = [1, 7, 42]
 
 describe.each(seeds)('flat-strict parser, seed %i', (seed) => {
@@ -99,8 +99,8 @@ describe('review regressions', () => {
     expect(Object.keys(state.spec!.elements)).toEqual(['main'])
   })
 
-  test('closedElements ignores braces inside strings', () => {
-    expect(closedElements('{"root":"a","elements":[{"id":"a","props":[{"key":"t","value":"}}\\"{"}]},{"id":"b"')).toBe(1)
+  test('completedElements ignores braces inside strings', () => {
+    expect(completedElements('{"root":"a","elements":[{"id":"a","props":[{"key":"t","value":"}}\\"{"}]},{"id":"b"')).toBe(1)
   })
 
   test('malformed prop entries and children reject the element instead of being dropped', async () => {
@@ -115,5 +115,21 @@ describe('review regressions', () => {
     const final = await parse(doc(el.main(['loop']), { id: 'loop', type: 'Stack', props: [], children: ['main'] }))
     expect(final.errors).toEqual([{ at: 'loop', message: 'children form a cycle' }])
     expect(final.spec!.elements.main.children).toEqual([])
+  })
+})
+
+describe('round 2 regressions', () => {
+  test('a malformed item before a finished element does not shift the cutoff', async () => {
+    const parser = flatStrict.createParser()
+    await parser.push(doc(null, el.main([])).slice(0, -1))
+    const final = await parser.end()
+    expect(Object.keys(final.spec!.elements)).toEqual(['main'])
+    expect(final.errors.map((e) => e.message)).toEqual(['element has no string id', 'JSON is truncated or invalid'])
+  })
+
+  test('completedElements counts primitive items once a comma follows', () => {
+    expect(completedElements('{"root":"a","elements":[null,12,{"id":"a"}')).toBe(3)
+    expect(completedElements('{"root":"a","elements":[null,12')).toBe(1)
+    expect(completedElements('{"root":"a","elements":[1]')).toBe(Infinity)
   })
 })
