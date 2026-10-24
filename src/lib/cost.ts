@@ -2,16 +2,23 @@ import type { Model } from '../models.ts'
 
 export type Usage = { inputTokens: number; outputTokens: number; cachedInputTokens?: number; cacheWriteTokens?: number }
 
-export const usd = (cost: number | null) => (cost === null ? '–' : `$${cost.toFixed(4)}`)
+export type Cost = number | null | 'subscription'
 
-// Sum of a batch; ≥ when some runs have unknown cost.
-export function batchUsd(costs: (number | null)[]) {
-  const known = costs.filter((c) => c !== null)
-  return `${known.length < costs.length ? '≥' : ''}$${known.reduce((a, b) => a + b, 0).toFixed(4)}`
+export const runCost = (model: Model | undefined, costUsd: number | null): Cost => (model && !model.price ? 'subscription' : costUsd)
+
+export const usd = (cost: Cost) => (cost === 'subscription' ? cost : cost === null ? '–' : `$${cost.toFixed(4)}`)
+
+// Sum of a batch's priced runs; ≥ when some runs have unknown cost.
+export function batchUsd(costs: Cost[]) {
+  const priced = costs.filter((c) => c !== 'subscription')
+  if (!priced.length) return 'subscription'
+  const known = priced.filter((c) => c !== null)
+  return `${known.length < priced.length ? '≥' : ''}$${known.reduce((a, b) => a + b, 0).toFixed(4)}`
 }
 
 // shortcut: ignores Haiku 5.5's higher price for prompts over 100k tokens, add tiers if prompts get that long
-export function cost({ price }: Model, { inputTokens, outputTokens, cachedInputTokens = 0, cacheWriteTokens = 0 }: Usage): number {
+export function cost({ price }: Model, { inputTokens, outputTokens, cachedInputTokens = 0, cacheWriteTokens = 0 }: Usage): number | null {
+  if (!price) return null
   const cachedRate = price.cachedInPerMTok ?? price.inPerMTok
   const writeRate = price.cacheWritePerMTok ?? price.inPerMTok
   const uncached = inputTokens - cachedInputTokens - cacheWriteTokens

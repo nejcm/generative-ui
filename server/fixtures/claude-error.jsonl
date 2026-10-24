@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","tools":[],"mcp_servers":[],"model":"no-such-model","claude_code_version":"2.1.310"}
+{"type":"system","subtype":"status","status":"requesting"}
+{"type":"assistant","message":{"model":"<synthetic>","type":"message","role":"assistant","content":[{"type":"text","text":"There's an issue with the selected model (no-such-model). It may not exist or you may not have access to it. Run --model to pick a different model."}]},"parent_tool_use_id":null,"error":"model_not_found"}
+{"type":"result","subtype":"success","is_error":true,"num_turns":1,"terminal_reason":"api_error","api_error_status":404,"result":"There's an issue with the selected model (no-such-model). It may not exist or you may not have access to it. Run --model to pick a different model.","total_cost_usd":0,"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}

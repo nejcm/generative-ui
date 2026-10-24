@@ -1,4 +1,4 @@
-export type Provider = 'anthropic' | 'openai'
+export type Provider = 'anthropic' | 'openai' | 'claude-code' | 'codex'
 
 export type Effort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
@@ -7,14 +7,15 @@ export type Model = {
   provider: Provider
   modelName: string
   label: string
-  price: { inPerMTok: number; outPerMTok: number; cachedInPerMTok?: number; cacheWritePerMTok?: number; source: string; checkedAt: string }
+  // Absent for subscription models, which are billed by the user's plan.
+  price?: { inPerMTok: number; outPerMTok: number; cachedInPerMTok?: number; cacheWritePerMTok?: number; source: string; checkedAt: string }
   supports: { strictJson: boolean; effort?: Effort[]; temperature: boolean }
 }
 
 const anthropicPricing = 'https://platform.claude.com/docs/en/about-claude/pricing'
 const openaiPricing = 'https://developers.openai.com/api/docs/pricing'
 
-export const models: Model[] = [
+const apiModels: Model[] = [
   {
     id: 'claude-haiku-5-5',
     provider: 'anthropic',
@@ -55,4 +56,22 @@ export const models: Model[] = [
     price: { inPerMTok: 2, outPerMTok: 10, cachedInPerMTok: 0.1, cacheWritePerMTok: 2.5, source: openaiPricing, checkedAt: '2026-10-24' },
     supports: { strictJson: true, effort: ['low', 'medium', 'high', 'xhigh', 'max'], temperature: false },
   },
+]
+
+const viaCli =
+  (provider: Provider, strictJson: boolean) =>
+  (m: Model): Model => ({
+    ...m,
+    id: `${m.id}-subscription`,
+    provider,
+    label: `${m.label} · subscription`,
+    price: undefined,
+    supports: { strictJson, effort: ['low', 'medium', 'high', 'xhigh', 'max'], temperature: false },
+  })
+
+// claude --json-schema lets the model skip its StructuredOutput tool, so it is prompt-only; codex --output-schema constrains.
+export const models: Model[] = [
+  ...apiModels,
+  ...apiModels.filter((m) => m.provider === 'anthropic').map(viaCli('claude-code', false)),
+  ...apiModels.filter((m) => m.provider === 'openai').map(viaCli('codex', true)),
 ]

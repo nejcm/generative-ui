@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest'
 import { models } from '../models.ts'
-import { batchUsd, cost, usd } from './cost.ts'
+import { batchUsd, cost, runCost, usd } from './cost.ts'
 
 const haiku = models.find((m) => m.id === 'claude-haiku-5-5')!
-const uncached = { ...haiku, price: { ...haiku.price, cachedInPerMTok: undefined } }
+const uncached = { ...haiku, price: { ...haiku.price!, cachedInPerMTok: undefined } }
 
 test('prices input and output per million tokens', () => {
   expect(cost(haiku, { inputTokens: 1_000_000, outputTokens: 1_000_000 })).toBeCloseTo(0.6, 9)
@@ -29,4 +29,13 @@ test('unknown run cost shows a dash; batch sums mark unknown parts with ≥', ()
   expect(usd(0.0012)).toBe('$0.0012')
   expect(batchUsd([0.001, null])).toBe('≥$0.0010')
   expect(batchUsd([0.001, 0.002])).toBe('$0.0030')
+})
+
+test('subscription runs show "subscription" and do not make batch sums partial', () => {
+  const sub = models.find((m) => m.id === 'claude-haiku-5-5-subscription')!
+  expect(cost(sub, { inputTokens: 1000, outputTokens: 10 })).toBeNull()
+  expect(usd(runCost(sub, null))).toBe('subscription')
+  expect(usd(runCost(haiku, null))).toBe('–')
+  expect(batchUsd([0.001, 'subscription'])).toBe('$0.0010')
+  expect(batchUsd(['subscription', 'subscription'])).toBe('subscription')
 })

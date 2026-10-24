@@ -5,8 +5,9 @@ import type { Context } from 'hono'
 import { z } from 'zod'
 import type { RunEvent } from '../src/lib/ndjson.ts'
 import { models, type Provider } from '../src/models.ts'
+import { isCli, runCli, type CliProvider } from './cli.ts'
 
-const providers: Record<Provider, (modelName: string) => LanguageModel> = { anthropic, openai }
+const providers: Record<Exclude<Provider, CliProvider>, (modelName: string) => LanguageModel> = { anthropic, openai }
 
 const RunRequest = z.object({
   runId: z.string(),
@@ -33,13 +34,19 @@ export async function run(c: Context) {
   // Fires when the client disconnects (@hono/node-server aborts the request on premature close).
   const signal = c.req.raw.signal
   const strict = output.kind === 'json-schema' && model.supports.strictJson
+  const effort = settings.effort && model.supports.effort?.includes(settings.effort) ? settings.effort : undefined
+  const headers = { 'content-type': 'application/x-ndjson', 'x-strict-output': String(strict) }
+  if (isCli(model.provider)) {
+    const schema = strict ? output.schema : undefined
+    return new Response(runCli(model.provider, { modelName: model.modelName, system, prompt, effort, schema }, signal), { headers })
+  }
   const started = performance.now()
   const result = streamText({
     model: providers[model.provider](model.modelName),
     system,
     prompt,
     temperature: model.supports.temperature ? settings.temperature : undefined,
-    reasoning: settings.effort && model.supports.effort?.includes(settings.effort) ? settings.effort : undefined,
+    reasoning: effort,
     ...(strict && {
       output: Output.object({ schema: jsonSchema(output.schema as JSONSchema7) }),
     }),
@@ -79,7 +86,7 @@ export async function run(c: Context) {
       controller.close()
     },
   })
-  return new Response(body, { headers: { 'content-type': 'application/x-ndjson', 'x-strict-output': String(strict) } })
+  return new Response(body, { headers })
 }
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))

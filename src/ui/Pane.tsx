@@ -8,7 +8,7 @@ import { cost, type Usage } from '@/lib/cost'
 import { sha256 } from '@/lib/hash'
 import { readNdjson, type RunEvent } from '@/lib/ndjson'
 import { strictOutputOf, type Run } from '@/lib/run'
-import type { Effort, Model } from '@/models'
+import { models as registry, type Effort, type Model } from '@/models'
 import { fixtures } from '@/prompts'
 import { Choice } from './Choice'
 import { MetricsStrip } from './MetricsStrip'
@@ -44,6 +44,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
   const model = models.find((m) => m.id === config.modelId) ?? models[0]
   const [result, setResult] = useState<{ approach: Approach; state: ParseState }>()
   const [metrics, setMetrics] = useState<Partial<Run['metrics']>>({})
+  const [shownModelId, setShownModelId] = useState<string>()
   const [saved, setSaved] = useState<Pick<Run, 'id' | 'rating' | 'notes'>>()
   const [notice, setNotice] = useState('')
   const [running, setRunning] = useState(false)
@@ -79,6 +80,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
     setRunKey(id)
     setResult({ approach, state })
     setMetrics({})
+    setShownModelId(model.id)
     setSaved(undefined)
     setNotice('')
     const started = performance.now()
@@ -176,10 +178,12 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
       setRunKey(loaded.id)
       setResult({ approach: shown, state })
       setMetrics(loaded.metrics)
+      setShownModelId(loaded.modelId)
       setSaved({ id: loaded.id, rating: loaded.rating, notes: loaded.notes })
     })
   }, [loaded])
 
+  const shownModel = registry.find((m) => m.id === shownModelId)
   const set = (settings: PaneConfig['settings']) => onChange({ ...config, settings: { ...config.settings, ...settings } })
 
   return (
@@ -233,6 +237,12 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
             </Button>
           )}
         </div>
+        {model && !model.price && (
+          <p className="text-xs text-muted-foreground">
+            Runs via your local CLI: start-up latency skews TTFT/TTFR, the harness adds its own context (Codex may include your global AGENTS
+            instructions), runs are read-only sandboxed but not tool-free, and usage counts against your plan.
+          </p>
+        )}
         <SystemPromptPanel
           generated={approach.systemPrompt({ catalog, fixture: draft.fixtureId ? fixtures[draft.fixtureId] : undefined })}
           override={config.systemOverride}
@@ -240,7 +250,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <MetricsStrip metrics={metrics} saved={saved} onRate={(rating) => patch({ rating })} onNotes={(notes) => patch({ notes })} />
+        <MetricsStrip metrics={metrics} subscription={Boolean(shownModel && !shownModel.price)} saved={saved} onRate={(rating) => patch({ rating })} onNotes={(notes) => patch({ notes })} />
         {notice && <p className="text-xs text-destructive">{notice}</p>}
         {result && <Result key={runKey} approach={result.approach} state={result.state} errors={metrics.errors ?? result.state.errors} />}
       </CardContent>

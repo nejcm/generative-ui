@@ -72,7 +72,7 @@ export default function App() {
           </TabsList>
         </div>
         <TabsContent value="play" keepMounted className="flex flex-col gap-4">
-          {models?.length === 0 && <p className="text-sm text-destructive">No models available: set a provider key in .env.</p>}
+          {models?.length === 0 && <p className="text-sm text-destructive">No models available: set a provider key in .env or log in to the claude or codex CLI.</p>}
           <PromptBar
             draft={draft}
             canRun={Boolean(models?.length)}

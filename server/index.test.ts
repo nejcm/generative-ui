@@ -6,6 +6,7 @@ import { app } from './index.ts'
 
 const mock = vi.hoisted(() => ({ model: undefined as unknown }))
 vi.mock('@ai-sdk/anthropic', () => ({ anthropic: () => mock.model }))
+vi.mock('./cli.ts', async (importOriginal) => ({ ...(await importOriginal<typeof import('./cli.ts')>()), probeClis: async () => ['codex'] }))
 
 afterEach(() => vi.unstubAllEnvs())
 
@@ -25,11 +26,11 @@ test('GET /api/health', async () => {
   expect(await res.json()).toEqual({ ok: true })
 })
 
-test('GET /api/models lists only models whose provider key is set', async () => {
+test('GET /api/models lists models whose provider key is set or whose CLI is logged in', async () => {
   vi.stubEnv('ANTHROPIC_API_KEY', 'test')
   vi.stubEnv('OPENAI_API_KEY', '')
   const ids = ((await (await app.request('/api/models')).json()) as { id: string }[]).map((m) => m.id)
-  expect(ids).toEqual(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'])
+  expect(ids).toEqual(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5', 'gpt-6-luna-subscription', 'gpt-6.1-sol-subscription'])
 })
 
 test('POST /api/run streams deltas, usage and done as NDJSON', async () => {

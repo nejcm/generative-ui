@@ -7,12 +7,13 @@ const secs = (ms: number | null | undefined) => (ms == null ? '–' : `${(ms / 1
 
 type Props = {
   metrics: Partial<Run['metrics']>
+  subscription: boolean
   saved?: Pick<Run, 'id' | 'rating' | 'notes'>
   onRate: (rating: number) => void
   onNotes: (notes: string) => void
 }
 
-export function MetricsStrip({ metrics: m, saved, onRate, onNotes }: Props) {
+export function MetricsStrip({ metrics: m, subscription, saved, onRate, onNotes }: Props) {
   return (
     <div className="flex flex-col gap-2 text-xs">
       <dl className="grid grid-cols-4 gap-x-3 gap-y-1 tabular-nums">
@@ -20,7 +21,7 @@ export function MetricsStrip({ metrics: m, saved, onRate, onNotes }: Props) {
           ['TTFT', secs(m.ttftMs)],
           ['TTFR', secs(m.ttfrMs)],
           ['Total', secs(m.totalMs)],
-          ['Cost', usd(m.costUsd ?? null)],
+          ['Cost', usd(subscription ? 'subscription' : (m.costUsd ?? null))],
           ['In', m.inputTokens ?? '–'],
           ['Out', m.outputTokens ?? '–'],
           ['Valid', m.valid == null ? '–' : m.valid ? '✓' : '✗'],
