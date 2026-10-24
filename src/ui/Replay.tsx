@@ -44,7 +44,7 @@ export function Replay({ run }: { run: Run }) {
   const state = stateAt(frames, playhead)
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           size="sm"
           onClick={() => {
@@ -65,7 +65,7 @@ export function Replay({ run }: { run: Run }) {
           step={1}
           value={Math.round(playhead)}
           onChange={(e) => seek(Number(e.target.value))}
-          className="min-w-0 flex-1"
+          className="min-w-32 flex-1"
         />
         <span className="text-sm tabular-nums">
           {seconds(playhead)} / {seconds(total)}

@@ -113,3 +113,12 @@ test('old runs without deltas render nothing; new ones prepare frames first', ()
   expect(renderToString(<Replay run={{ ...run, deltas: undefined }} />)).toBe('')
   expect(renderToString(<Replay run={run} />)).toContain('Preparing…')
 })
+
+test('a pane load cancelled by a live run never applies, even if already resolved', async () => {
+  const applied: string[] = []
+  const cancel = whenCurrent(Promise.resolve('loaded'), (v) => applied.push(v))
+  cancel()
+  cancel()
+  await new Promise((r) => setTimeout(r))
+  expect(applied).toEqual([])
+})

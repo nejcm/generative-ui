@@ -7,11 +7,13 @@ import { Input } from '@/components/ui/input'
 import { cost, runCost, type Usage } from '@/lib/cost'
 import { sha256 } from '@/lib/hash'
 import { readNdjson, type RunEvent } from '@/lib/ndjson'
+import { whenCurrent } from '@/lib/playback'
 import { strictOutputOf, type Run } from '@/lib/run'
 import { models as registry, type Model } from '@/models'
 import { fixtures } from '@/prompts'
 import { Choice } from './Choice'
 import { MetricsStrip } from './MetricsStrip'
+import { Replay } from './Replay'
 import { Result } from './Result'
 import { SystemPromptPanel } from './SystemPromptPanel'
 
@@ -50,12 +52,15 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
   const [notice, setNotice] = useState('')
   const [running, setRunning] = useState(false)
   const [runKey, setRunKey] = useState('')
+  const [replay, setReplay] = useState<Run>()
   const controllerRef = useRef<AbortController>(undefined)
+  const cancelLoad = useRef<() => void>(undefined)
   const seenBatch = useRef(batch)
 
   async function start(req: RunRequest) {
     if (!model) return
     controllerRef.current?.abort()
+    cancelLoad.current?.()
     const controller = new AbortController()
     controllerRef.current = controller
     const isCurrent = () => controllerRef.current === controller
@@ -77,6 +82,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
 
     setRunning(true)
     setRunKey(id)
+    setReplay(undefined)
     setResult({ approach, state })
     setMetrics({})
     setShownModelId(model.id)
@@ -175,13 +181,15 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
   useEffect(() => {
     if (!loaded) return
     const shown = approachById(loaded.approach)!
-    parseAll(shown, loaded.rawOutput).then((state) => {
+    cancelLoad.current = whenCurrent(parseAll(shown, loaded.rawOutput), (state) => {
       setRunKey(loaded.id)
+      setReplay(loaded.deltas ? loaded : undefined)
       setResult({ approach: shown, state })
       setMetrics(loaded.metrics)
       setShownModelId(loaded.modelId)
       setSaved({ id: loaded.id, rating: loaded.rating, notes: loaded.notes })
     })
+    return cancelLoad.current
   }, [loaded])
 
   const shownModel = registry.find((m) => m.id === shownModelId)
@@ -256,7 +264,11 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
       <CardContent className="flex flex-col gap-3">
         <MetricsStrip metrics={metrics} cost={runCost(shownModel, metrics.costUsd ?? null)} saved={saved} onRate={(rating) => patch({ rating })} onNotes={(notes) => patch({ notes })} />
         {notice && <p className="text-xs text-destructive">{notice}</p>}
-        {result && <Result key={runKey} approach={result.approach} state={result.state} errors={metrics.errors ?? result.state.errors} />}
+        {replay ? (
+          <Replay key={replay.id} run={replay} />
+        ) : (
+          result && <Result key={runKey} approach={result.approach} state={result.state} errors={metrics.errors ?? result.state.errors} />
+        )}
       </CardContent>
     </Card>
   )
