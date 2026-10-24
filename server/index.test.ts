@@ -28,10 +28,8 @@ test('GET /api/health', async () => {
 test('GET /api/models lists only models whose provider key is set', async () => {
   vi.stubEnv('ANTHROPIC_API_KEY', 'test')
   vi.stubEnv('OPENAI_API_KEY', '')
-  vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '')
-  vi.stubEnv('GROQ_API_KEY', 'test')
   const ids = ((await (await app.request('/api/models')).json()) as { id: string }[]).map((m) => m.id)
-  expect(ids).toEqual(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5', 'groq-gpt-oss-20b'])
+  expect(ids).toEqual(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'])
 })
 
 test('POST /api/run streams deltas, usage and done as NDJSON', async () => {

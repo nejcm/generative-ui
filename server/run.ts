@@ -1,6 +1,4 @@
 import { anthropic } from '@ai-sdk/anthropic'
-import { google } from '@ai-sdk/google'
-import { groq } from '@ai-sdk/groq'
 import { openai } from '@ai-sdk/openai'
 import { Output, jsonSchema, streamText, type JSONSchema7, type LanguageModel } from 'ai'
 import type { Context } from 'hono'
@@ -8,7 +6,7 @@ import { z } from 'zod'
 import type { RunEvent } from '../src/lib/ndjson.ts'
 import { models, type Provider } from '../src/models.ts'
 
-const providers: Record<Provider, (modelName: string) => LanguageModel> = { anthropic, openai, google, groq }
+const providers: Record<Provider, (modelName: string) => LanguageModel> = { anthropic, openai }
 
 const RunRequest = z.object({
   runId: z.string(),

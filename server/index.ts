@@ -8,8 +8,6 @@ import { runsApi } from './runs.ts'
 const keyEnv: Record<Provider, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
-  google: 'GOOGLE_GENERATIVE_AI_API_KEY',
-  groq: 'GROQ_API_KEY',
 }
 
 const loopback = new Set(['localhost', '127.0.0.1', '[::1]'])
