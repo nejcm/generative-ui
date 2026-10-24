@@ -59,3 +59,7 @@ src/ui/        lanes, timeline, metrics, history, replay
 src/models.ts  model list and prices
 src/prompts.ts presets and fixtures
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).

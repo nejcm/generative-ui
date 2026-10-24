@@ -2,6 +2,16 @@
   "name": "generative-ui",
   "private": true,
   "version": "0.0.0",
+  "description": "Local playground comparing UI-generation approaches across models",
+  "license": "MIT",
+  "author": "nejcm",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nejcm/generative-ui.git"
+  },
+  "engines": {
+    "node": ">=24"
+  },
   "type": "module",
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env server/index.ts & vite",
