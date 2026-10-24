@@ -8,7 +8,7 @@ Local playground that races the same prompt across models and three ways of gett
 |---|---|---|---|
 | `json-render` | [json-render](https://github.com/vercel-labs/json-render) SpecStream (JSONL RFC 6902 patches) | patch by patch | prompt generated from the catalog, per-patch Zod validation |
 | `flat-strict` | strict JSON schema: flat element list with id-referenced children | partial-JSON parse | provider structured output |
-| `html` | sandboxed HTML (CSP applied) | raw text | prompt only |
+| `html` | HTML body in a sandboxed iframe (CSP applied); the page shell supplies the stylesheet and a chart helper | raw text | prompt only |
 
 All three render from one shared component catalog (`src/catalog`).
 

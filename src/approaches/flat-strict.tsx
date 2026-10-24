@@ -83,17 +83,29 @@ export function completedElements(text: string) {
   return commas + (lastClosed ? 1 : 0)
 }
 
+type Validator = { safeParse(v: unknown): { success: boolean } }
+// Own keys only: a prop named like an Object.prototype member (toString) must not resolve to a function.
+const validatorOf = (type: unknown, key: string): Validator | undefined => {
+  const shape: Record<string, Validator> = componentProps[type as ComponentName]?.shape ?? {}
+  return Object.hasOwn(shape, key) ? shape[key] : undefined
+}
+
 // Values are strings on the wire; use the JSON-decoded value only where the prop schema accepts it.
 function toProps(type: unknown, entries: Kv[]): Record<string, unknown> {
-  const shape: Record<string, { safeParse(v: unknown): { success: boolean } }> =
-    componentProps[type as ComponentName]?.shape ?? {}
   return Object.fromEntries(
     entries.map(({ key, value }) => {
       const decoded = tryJson(value)
-      return [key, decoded !== undefined && shape[key]?.safeParse(decoded).success ? decoded : value]
+      return [key, decoded !== undefined && validatorOf(type, key)?.safeParse(decoded).success ? decoded : value]
     }),
   )
 }
+
+// An optional prop that fails its schema costs only that prop, not the element (and its subtree).
+const droppableProps = (type: unknown, props: Record<string, unknown>) =>
+  Object.keys(props).filter((key) => {
+    const validator = validatorOf(type, key)
+    return validator && !validator.safeParse(props[key]).success && validator.safeParse(undefined).success
+  })
 
 export function flatToSpec(value: unknown, { complete, closed, final }: { complete: boolean; closed: number; final: boolean }): ParseState {
   const errors: ParseError[] = []
@@ -109,7 +121,12 @@ export function flatToSpec(value: unknown, { complete, closed, final }: { comple
     if (seen.has(raw.id)) return errors.push({ at: raw.id, message: 'duplicate id' })
     seen.add(raw.id)
     const wire = wireError(raw)
-    const element = wire ? undefined : { type: String(raw.type), props: toProps(raw.type, raw.props as Kv[]), children: raw.children as string[] }
+    const props = wire ? {} : toProps(raw.type, raw.props as Kv[])
+    for (const key of droppableProps(raw.type, props)) {
+      errors.push({ at: raw.id, message: `dropped invalid optional prop ${key}: ${JSON.stringify(props[key]).slice(0, 80)}` })
+      delete props[key]
+    }
+    const element = wire ? undefined : { type: String(raw.type), props, children: raw.children as string[] }
     let error = wire ?? validateElement(element)
     if (!error) {
       elements[raw.id] = element!
@@ -152,8 +169,12 @@ function createParser(): Parser {
   }
 }
 
+// B has no state or events, so the catalog's "Bind …" hints ($bindState, `on`) would only produce invalid props.
 const componentLines = (prompt: string) =>
-  prompt.split('\n').filter((l) => Object.keys(componentProps).some((name) => l.startsWith(`- ${name}: `)))
+  prompt
+    .split('\n')
+    .filter((l) => Object.keys(componentProps).some((name) => l.startsWith(`- ${name}: `)))
+    .map((l) => l.replace(/ Bind [^.]*\./g, ''))
 
 export const flatStrict: Approach = {
   id: 'flat-strict',

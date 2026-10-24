@@ -17,7 +17,8 @@ const newPane = (approach: PaneConfig['approach']): PaneConfig => ({
   key: crypto.randomUUID(),
   approach,
   modelId: '',
-  settings: {},
+  // Benchmark: high effort bought latency, not validity. Pane ignores it for models without a "low" level.
+  settings: { effort: 'low' },
 })
 type Page = 'lab' | 'history' | 'stats'
 const pageTitle: Record<Page, string> = {

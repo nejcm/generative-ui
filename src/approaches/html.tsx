@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { chartScript, shellCss, shellPrompt } from './html-shell'
 import { designBrief, fixtureBlock, stripFences, type Approach, type ParseState, type Parser } from './types'
 
 const CSP = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:"
@@ -21,8 +22,9 @@ function createParser(): Parser {
 }
 
 // CSP meta goes first so it is in force before any generated markup; the model's doctype is moved ahead of it.
+// The shell (stylesheet, chart helper) follows, so the model writes only the body.
 export const withCsp = (html: string) =>
-  `<!doctype html><meta http-equiv="Content-Security-Policy" content="${CSP}">${html.replace(/<!doctype[^>]*>/i, '')}`
+  `<!doctype html><meta http-equiv="Content-Security-Policy" content="${CSP}"><style>${shellCss}</style><script>${chartScript}</script>${html.replace(/<!doctype[^>]*>/i, '')}`
 
 function useThrottled<T>(value: T, ms: number) {
   const [throttled, setThrottled] = useState(value)
@@ -48,9 +50,10 @@ function HtmlRenderer({ state }: { state: ParseState }) {
 
 export const html: Approach = {
   id: 'html',
-  label: 'C · raw HTML (sandboxed iframe)',
+  label: 'C · HTML body (sandboxed iframe)',
   systemPrompt: ({ fixture }) =>
-    'Return one self-contained HTML document. Inline CSS/JS only. No external requests. No markdown, no code fences, no prose. Responsive layout, system fonts, light and dark support. Take inspiration from shadcn/ui: neutral palette with one accent, bordered cards, 7px radius, muted secondary text, subtle shadows. Chart colours: oklch(0.62 0.17 255), oklch(0.7 0.13 185), oklch(0.78 0.15 80), oklch(0.6 0.18 300), oklch(0.65 0.2 15). The style notes and the design brief below are defaults: whenever the request asks for something different (look, colours, fonts, layout, extra sections), follow the request.' +
+    'Return only the body content of an HTML page: no doctype, <html>, <head> or <body> tags, no markdown, no code fences, no prose. The page shell below is already loaded, so build with its classes and chart helper. Inline <script> is allowed for interactivity (tabs, toggles, filters); no external requests. Add a small <style> block only for what the classes cannot express, or when the request asks for a different look, colours, fonts or layout: then follow the request.' +
+    shellPrompt +
     designBrief +
     fixtureBlock(fixture),
   output: { kind: 'text' },

@@ -141,3 +141,49 @@ test('a dangling child named toString is dropped and counted, not rendered', asy
   expect(final.errors).toEqual([{ at: 'main', message: 'missing child "toString"' }])
   expect(final.spec!.elements.main.children).toEqual(['stat'])
 })
+
+describe('benchmark failures (login preset, every Claude model)', () => {
+  // Verbatim element from a recorded run: a $bindState expression B cannot evaluate, in an optional prop.
+  const remember = {
+    id: 'remember',
+    type: 'Checkbox',
+    props: [
+      { key: 'label', value: 'Remember me for 30 days' },
+      { key: 'checked', value: '{"$bindState": "/login/rememberMe"}' },
+    ],
+    children: [],
+  }
+
+  test('an invalid optional prop is dropped and reported; the element still renders', async () => {
+    const parser = flatStrict.createParser()
+    await parser.push(doc(el.main(['remember']), remember))
+    const final = await parser.end()
+    expect(final.spec!.elements.remember.props).toEqual({ label: 'Remember me for 30 days' })
+    expect(final.spec!.elements.main.children).toEqual(['remember'])
+    expect(final.errors).toEqual([{ at: 'remember', message: expect.stringContaining('dropped invalid optional prop checked') }])
+  })
+
+  test('an invalid required prop still rejects the element', async () => {
+    const parser = flatStrict.createParser()
+    await parser.push(doc(el.main(['done']), { id: 'done', type: 'Progress', props: [{ key: 'value', value: '{"$state": "/x"}' }], children: [] }))
+    const final = await parser.end()
+    expect(final.spec!.elements.done).toBeUndefined()
+    expect(final.errors[0]).toMatchObject({ at: 'done', message: expect.stringContaining('Progress props') })
+  })
+
+  test('the prompt carries no state or event binding hints', () => {
+    const prompt = flatStrict.systemPrompt({ catalog })
+    expect(prompt).not.toContain('$bindState')
+    expect(prompt).not.toContain('Bind ')
+    expect(prompt).toContain('- Checkbox: { label: string, checked?: boolean } - Labelled checkbox.')
+  })
+
+  test('a prop named like an Object.prototype member is ignored, not a crash', async () => {
+    const parser = flatStrict.createParser()
+    const odd = { id: 'stat', type: 'Stat', props: [...el.stat.props, { key: 'toString', value: '1' }, { key: 'constructor', value: 'x' }], children: [] }
+    await parser.push(doc(el.main(['stat', 'table']), odd, el.table))
+    const final = await parser.end()
+    expect(Object.keys(final.spec!.elements)).toEqual(['main', 'stat', 'table'])
+    expect(final.errors).toEqual([])
+  })
+})

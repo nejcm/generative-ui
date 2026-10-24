@@ -33,7 +33,7 @@ export const shortOf = (a: Approach) => a.label.split(' · ')[1] ?? a.label
 export const captions: Record<Approach['id'], string> = {
   'json-render': 'json-render · SpecStream patches into the catalog',
   'flat-strict': 'flat element list · strict JSON into the catalog',
-  html: 'raw HTML · sandboxed iframe, no scripts',
+  html: 'HTML body · page shell supplies CSS and charts, sandboxed iframe',
 }
 export const words = ['', 'poor', 'weak', 'ok', 'good', 'great']
 

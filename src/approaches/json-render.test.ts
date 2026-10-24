@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { jsonRender } from './json-render'
+import { customRules, jsonRender } from './json-render'
 import { replay } from './replay'
 
 const lines = {
@@ -64,11 +64,34 @@ test('ignores markdown fences around the patches', async () => {
   expect(final.renderable).toBe(true)
 })
 
-test('system prompt is the catalog prompt plus the fixture', async () => {
+test('system prompt is the catalog prompt with the custom rules, plus the fixture', async () => {
   const { catalog } = await import('@/catalog/catalog')
   const prompt = jsonRender.systemPrompt({ catalog, fixture: { sales: [1, 2] } })
-  expect(prompt.startsWith(catalog.prompt())).toBe(true)
+  expect(prompt.startsWith(catalog.prompt({ customRules }))).toBe(true)
+  for (const rule of customRules) expect(prompt).toContain(rule)
   expect(prompt).toContain('"sales"')
+})
+
+describe('benchmark failures (gpt-6.1-sol, comparison preset)', () => {
+  // Verbatim line 9 of a recorded run: a nested $cond with one closing brace too many.
+  const extraBrace =
+    '{"op":"add","path":"/elements/recommendation","value":{"type":"Heading","props":{"level":"h3","text":{"$cond":{"$state":"/priority","eq":"Travel and everyday work"},"$then":"Pick Aero 14","$else":{"$cond":{"$state":"/priority","eq":"Video editing, 3D and gaming"},"$then":"Pick Forge 16","$else":"Pick Nimbus 13"}}}},"children":[]}}'
+  const parse = async (text: string) => {
+    const parser = jsonRender.createParser()
+    await parser.push(text)
+    return parser.end()
+  }
+
+  test('an extra trailing brace is repaired, applied, and still reported', async () => {
+    const final = await parse(jsonl(lines.root, lines.main(['recommendation']), { op: 'add', path: '/state/priority', value: 'Travel and everyday work' }) + extraBrace + '\n')
+    expect(final.spec!.elements.recommendation.type).toBe('Heading')
+    expect(final.errors).toEqual([{ at: 'line 4', message: 'repaired: removed 1 extra closing brace' }])
+  })
+
+  test('a line broken in the middle is not "repaired"', async () => {
+    const final = await parse(jsonl(lines.root, lines.main([])) + extraBrace.replace('"children"', '}"children"') + '\n')
+    expect(final.errors).toEqual([{ at: 'line 3', message: expect.stringContaining('not a JSON patch') }])
+  })
 })
 
 describe('review regressions', () => {

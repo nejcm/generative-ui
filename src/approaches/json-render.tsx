@@ -44,9 +44,15 @@ function createParser(): Parser {
     lineNo++
     const trimmed = text.trim()
     if (!trimmed || trimmed.startsWith('```')) return
-    const patch = parseSpecStreamLine(trimmed)
+    const at = `line ${lineNo}`
+    let patch = parseSpecStreamLine(trimmed)
+    // Models nesting $cond chains sometimes close one brace too many at the end of the line.
+    for (let cut = 1; !patch && cut <= 3 && trimmed.endsWith('}'.repeat(cut)); cut++) {
+      patch = parseSpecStreamLine(trimmed.slice(0, -cut))
+      if (patch) errors.push({ at, message: `repaired: removed ${cut} extra closing brace${cut > 1 ? 's' : ''}` })
+    }
     const error = patch ? apply(patch) : `not a JSON patch: ${trimmed.slice(0, 80)}`
-    if (error) errors.push({ at: `line ${lineNo}`, message: error })
+    if (error) errors.push({ at, message: error })
   }
 
   const state = () => ({ spec, renderable: Object.hasOwn(spec.elements, spec.root), errors: [...errors] })
@@ -68,10 +74,16 @@ function createParser(): Parser {
   }
 }
 
+// From benchmark failures: brace miscounts in nested $cond, and expressions inside array props.
+export const customRules = [
+  'Do not nest $cond inside $then or $else. For more than two variants, use sibling elements with `visible` conditions.',
+  'A dynamic expression ($state, $bindState, $cond, $template…) must be a whole prop value, never an item inside an array or a field inside an object.',
+]
+
 export const jsonRender: Approach = {
   id: 'json-render',
   label: 'A · json-render SpecStream',
-  systemPrompt: ({ catalog, fixture }) => catalog.prompt() + designBrief + fixtureBlock(fixture),
+  systemPrompt: ({ catalog, fixture }) => catalog.prompt({ customRules }) + designBrief + fixtureBlock(fixture),
   output: { kind: 'text' },
   createParser,
   Renderer: ({ state }) => <SpecView spec={state.spec ?? null} />,
