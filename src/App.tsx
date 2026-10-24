@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Check, Copy, FlaskConical, History as HistoryIcon, Moon, Plug, Plus, Square, Sun, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, BarChart3, Check, Copy, FlaskConical, History as HistoryIcon, Moon, Plug, Plus, Square, Sun, X } from 'lucide-react'
 import { approachById, approaches } from '@/approaches'
 import { usd } from '@/lib/cost'
 import type { Run, RunSummary } from '@/lib/run'
@@ -7,6 +7,7 @@ import { models as registry, type Model, type Provider } from '@/models'
 import { presets } from '@/prompts'
 import { ApBadge, Indicator, live, Pips, secs, Seg, shortOf, type LaneSummary } from './ui/bits'
 import { History, loadBatch } from './ui/History'
+import { Stats } from './ui/Stats'
 import { Pane, type PaneConfig, type RunRequest } from './ui/Pane'
 import { PromptBar } from './ui/PromptBar'
 import { Timeline } from './ui/Timeline'
@@ -18,10 +19,11 @@ const newPane = (approach: PaneConfig['approach']): PaneConfig => ({
   modelId: '',
   settings: {},
 })
-type Page = 'lab' | 'history'
+type Page = 'lab' | 'history' | 'stats'
 const pageTitle: Record<Page, string> = {
   lab: 'Lab',
   history: 'History',
+  stats: 'Stats',
 }
 const providers: [Provider, string][] = [
   ['anthropic', 'Anthropic API'],
@@ -180,6 +182,7 @@ export default function App() {
             [
               ['lab', FlaskConical, null],
               ['history', HistoryIcon, toRate ? `${toRate} to rate` : null],
+              ['stats', BarChart3, null],
             ] as const
           ).map(([id, Icon, count]) => (
             <button key={id} type="button" className={page === id ? 'on' : undefined} aria-current={page === id ? 'page' : undefined} onClick={() => setPage(id)}>
@@ -248,6 +251,7 @@ export default function App() {
               options={[
                 { value: 'lab', label: pageTitle.lab },
                 { value: 'history', label: pageTitle.history },
+                { value: 'stats', label: pageTitle.stats },
               ]}
               onChange={setPage}
             />
@@ -408,6 +412,7 @@ export default function App() {
             </div>
           </div>
           {page === 'history' && <History onOpenBatch={openBatch} />}
+          {page === 'stats' && <Stats />}
         </main>
       </div>
     </div>

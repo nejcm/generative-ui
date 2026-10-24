@@ -252,3 +252,27 @@ body{margin:0;background:var(--frame)}
 @media (max-width:1100px){.lab,.hdet{grid-template-columns:minmax(0,1fr)}.rail{position:static}.foot{grid-template-columns:minmax(0,1fr)}.m-strip{grid-template-columns:repeat(4,minmax(0,1fr))}.m-cell{border-bottom:1px solid var(--line)}}
 @media (max-width:760px){.shell{grid-template-columns:minmax(0,1fr)}.side{display:none}.mnav{display:block}.top{padding:0 16px}.sheet{margin:0;border-radius:0;border-width:1px 0 0;padding:16px}.m-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.cfg{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.trow{grid-template-columns:20px 20px minmax(0,1fr)}.trow > :nth-child(4),.trow > :nth-child(5){grid-column:1 / -1}}
 @media (prefers-reduced-motion:reduce){.gul *{animation:none!important;transition:none!important}}
+/* Stats page: KPI strip is one container split by 1px dividers; 1.4fr+1fr+... closes to the canvas width */
+.kpis{display:grid;grid-template-columns:1.4fr repeat(4,1fr);background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.kpi{padding:14px 18px;min-width:0}
+.kpi+.kpi{border-left:1px solid var(--line)}
+.kpi .kv{display:block;margin-top:4px;font-size:24px;font-weight:500;letter-spacing:-.015em;line-height:1.15;font-variant-numeric:tabular-nums}
+.kpi.lead .kv{font-size:32px}
+.kpi .kv small{margin-left:3px;font-size:14px;font-weight:400;color:var(--fg-3);letter-spacing:0}
+.sgrid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:14px;align-items:start}
+.stats .htable{table-layout:fixed}
+.stats .htable th{white-space:nowrap}
+.stats .htable th:first-child,.stats .htable td:first-child{width:30%;overflow:hidden;text-overflow:ellipsis}
+.stats.narrow .htable th:first-child,.stats.narrow .htable td:first-child{width:17%}
+.stats.narrow .htable th,.stats.narrow .htable td{padding:0 7px}
+.stats.wide .htable th:first-child,.stats.wide .htable td:first-child{width:58%}
+.stats .htable td{height:44px;vertical-align:middle}
+.stats .htable tr:last-child td{border-bottom:0}
+.stats .panel-h h2{font-size:13px}
+.mbar{height:3px;margin:5px 0 0 auto;width:100%;max-width:72px;display:flex;justify-content:flex-end}
+.mbar i{display:block;height:100%;background:var(--line-strong);border-radius:1px}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.empty{margin:0;padding:16px;color:var(--fg-3);font-size:13px}
+@media (max-width:1100px){.sgrid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:700px){.kpis{grid-template-columns:1fr 1fr}.kpi.lead{grid-column:1/-1}.kpi:nth-child(n+3){border-top:1px solid var(--line)}.kpi:nth-child(3),.kpi:nth-child(5){border-left:0}}
+@media (max-width:700px){.stats .htable{min-width:600px}}

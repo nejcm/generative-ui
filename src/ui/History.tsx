@@ -26,7 +26,7 @@ export async function loadBatch(batchId: string) {
 }
 
 const presetLabel = (id?: string) => presets.find((p) => p.id === id)?.label ?? 'Custom'
-const modelLabel = (id: string) => models.find((m) => m.id === id)?.label ?? id
+export const modelLabel = (id: string) => models.find((m) => m.id === id)?.label ?? id
 
 export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void }) {
   const [presetId, setPresetId] = useState('')
