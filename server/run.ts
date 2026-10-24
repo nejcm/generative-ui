@@ -14,7 +14,7 @@ const RunRequest = z.object({
   modelId: z.string(),
   settings: z.object({
     temperature: z.number().min(0).max(2).optional(),
-    effort: z.enum(['none', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
+    effort: z.string().optional(),
   }),
   system: z.string(),
   prompt: z.string().min(1),
@@ -34,7 +34,8 @@ export async function run(c: Context) {
   // Fires when the client disconnects (@hono/node-server aborts the request on premature close).
   const signal = c.req.raw.signal
   const strict = output.kind === 'json-schema' && model.supports.strictJson
-  const effort = settings.effort && model.supports.effort?.includes(settings.effort) ? settings.effort : undefined
+  const { effort } = settings
+  if (effort && !model.supports.effort?.includes(effort)) return c.json({ error: `Unsupported effort for ${modelId}: ${effort}` }, 400)
   const headers = { 'content-type': 'application/x-ndjson', 'x-strict-output': String(strict) }
   if (isCli(model.provider)) {
     const schema = strict ? output.schema : undefined
@@ -46,7 +47,7 @@ export async function run(c: Context) {
     system,
     prompt,
     temperature: model.supports.temperature ? settings.temperature : undefined,
-    reasoning: effort,
+    reasoning: effort as Parameters<typeof streamText>[0]['reasoning'], // validated against the model's list above
     ...(strict && {
       output: Output.object({ schema: jsonSchema(output.schema as JSONSchema7) }),
     }),

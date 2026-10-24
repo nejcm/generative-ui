@@ -1,6 +1,6 @@
-export type Provider = 'anthropic' | 'openai' | 'claude-code' | 'codex'
+export type Provider = 'anthropic' | 'openai' | 'claude-code' | 'codex' | 'opencode'
 
-export type Effort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+export type Plan = 'subscription' | 'subscription or credits'
 
 export type Model = {
   id: string
@@ -9,8 +9,13 @@ export type Model = {
   label: string
   // Absent for subscription models, which are billed by the user's plan.
   price?: { inPerMTok: number; outPerMTok: number; cachedInPerMTok?: number; cacheWritePerMTok?: number; source: string; checkedAt: string }
-  supports: { strictJson: boolean; effort?: Effort[]; temperature: boolean }
+  plan?: Plan
+  // Reasoning values in the runner's own names, in picker order.
+  supports: { strictJson: boolean; effort?: string[]; temperature: boolean }
 }
+
+// Only the general levels; models offering two of them show just those.
+const standardEffort = ['low', 'medium', 'high']
 
 const anthropicPricing = 'https://platform.claude.com/docs/en/about-claude/pricing'
 const openaiPricing = 'https://developers.openai.com/api/docs/pricing'
@@ -22,7 +27,7 @@ const apiModels: Model[] = [
     modelName: 'claude-haiku-5-5',
     label: 'Claude Haiku 5.5',
     price: { inPerMTok: 0.1, outPerMTok: 0.5, cachedInPerMTok: 0.01, source: anthropicPricing, checkedAt: '2026-10-24' },
-    supports: { strictJson: true, effort: ['none', 'low', 'medium', 'high', 'xhigh', 'max'], temperature: false },
+    supports: { strictJson: true, effort: standardEffort, temperature: false },
   },
   {
     id: 'claude-sonnet-5-5',
@@ -30,7 +35,7 @@ const apiModels: Model[] = [
     modelName: 'claude-sonnet-5-5',
     label: 'Claude Sonnet 5.5',
     price: { inPerMTok: 2, outPerMTok: 10, cachedInPerMTok: 0.1, source: anthropicPricing, checkedAt: '2026-10-24' },
-    supports: { strictJson: true, effort: ['low', 'medium', 'high', 'xhigh', 'max'], temperature: false },
+    supports: { strictJson: true, effort: standardEffort, temperature: false },
   },
   {
     id: 'claude-opus-5-5',
@@ -38,7 +43,7 @@ const apiModels: Model[] = [
     modelName: 'claude-opus-5-5',
     label: 'Claude Opus 5.5',
     price: { inPerMTok: 4, outPerMTok: 20, cachedInPerMTok: 0.2, source: anthropicPricing, checkedAt: '2026-10-24' },
-    supports: { strictJson: true, effort: ['low', 'medium', 'high', 'xhigh', 'max'], temperature: false },
+    supports: { strictJson: true, effort: standardEffort, temperature: false },
   },
   {
     id: 'gpt-6-luna',
@@ -46,7 +51,7 @@ const apiModels: Model[] = [
     modelName: 'gpt-6-luna',
     label: 'GPT-6 Luna',
     price: { inPerMTok: 0.1, outPerMTok: 0.5, cachedInPerMTok: 0.01, cacheWritePerMTok: 0.125, source: openaiPricing, checkedAt: '2026-10-24' },
-    supports: { strictJson: true, effort: ['none', 'low', 'medium', 'high', 'xhigh', 'max'], temperature: false },
+    supports: { strictJson: true, effort: standardEffort, temperature: false },
   },
   {
     id: 'gpt-6.1-sol',
@@ -54,7 +59,7 @@ const apiModels: Model[] = [
     modelName: 'gpt-6.1-sol',
     label: 'GPT-6.1 Sol',
     price: { inPerMTok: 2, outPerMTok: 10, cachedInPerMTok: 0.1, cacheWritePerMTok: 2.5, source: openaiPricing, checkedAt: '2026-10-24' },
-    supports: { strictJson: true, effort: ['low', 'medium', 'high', 'xhigh', 'max'], temperature: false },
+    supports: { strictJson: true, effort: standardEffort, temperature: false },
   },
 ]
 
@@ -66,12 +71,29 @@ const viaCli =
     provider,
     label: `${m.label} · subscription`,
     price: undefined,
-    supports: { strictJson, effort: ['low', 'medium', 'high', 'xhigh', 'max'], temperature: false },
+    supports: { strictJson, effort: standardEffort, temperature: false },
   })
+
+// Effort values are the general levels among the model's opencode variants (`GET /api/model`, opencode v2.0.32).
+const opencodeGo = (name: string, label: string, effort: string[]): Model => ({
+  id: `${name}-opencode-go`,
+  provider: 'opencode',
+  modelName: `opencode-go/${name}`,
+  label: `${label} · OpenCode Go`,
+  // Go bills the credit balance past its quota when Extra Usage is on, which the CLI cannot see or prevent.
+  plan: 'subscription or credits',
+  supports: { strictJson: false, effort, temperature: false },
+})
 
 // claude --json-schema lets the model skip its StructuredOutput tool, so it is prompt-only; codex --output-schema constrains.
 export const models: Model[] = [
   ...apiModels,
   ...apiModels.filter((m) => m.provider === 'anthropic').map(viaCli('claude-code', false)),
   ...apiModels.filter((m) => m.provider === 'openai').map(viaCli('codex', true)),
+  opencodeGo('deepseek-v4.1-flash', 'DeepSeek V4.1 Flash', ['high', 'max']),
+  opencodeGo('glm-5.3-flash', 'GLM-5.3 Flash', ['high', 'max']),
+  opencodeGo('kimi-k3', 'Kimi K3', ['max']),
+  opencodeGo('minimax-m3', 'MiniMax M3', []),
+  opencodeGo('qwen3.8-max', 'Qwen3.8 Max', ['low', 'medium']),
+  opencodeGo('qwen3.8-flash', 'Qwen3.8 Flash', ['low', 'medium']),
 ]

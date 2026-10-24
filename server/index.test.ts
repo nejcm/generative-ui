@@ -87,6 +87,12 @@ test('a model error ends the stream with a single error event', async () => {
   expect(events).toEqual([{ t: 'error', message: 'boom' }])
 })
 
+test('POST /api/run rejects an effort the model does not list', async () => {
+  const body = (modelId: string, effort: string) => JSON.stringify({ ...JSON.parse(runBody()), modelId, settings: { effort } })
+  expect((await post(body('claude-sonnet-5-5', 'none'))).status).toBe(400)
+  expect((await post(body('kimi-k3-opencode-go', 'low'))).status).toBe(400)
+})
+
 test('POST /api/run rejects an unknown model', async () => {
   const res = await post(JSON.stringify({ ...JSON.parse(runBody()), modelId: 'nope' }))
   expect(res.status).toBe(400)

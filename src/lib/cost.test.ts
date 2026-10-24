@@ -39,3 +39,10 @@ test('subscription runs show "subscription" and do not make batch sums partial',
   expect(batchUsd([0.001, 'subscription'])).toBe('$0.0010')
   expect(batchUsd(['subscription', 'subscription'])).toBe('subscription')
 })
+
+test('OpenCode Go runs may use credits, so they show that and make batch sums partial', () => {
+  const go = models.find((m) => m.id === 'kimi-k3-opencode-go')!
+  expect(usd(runCost(go, null))).toBe('subscription or credits')
+  expect(batchUsd(['subscription', 'subscription or credits'])).toBe('subscription or credits')
+  expect(batchUsd([0.001, 'subscription or credits'])).toBe('≥$0.0010')
+})

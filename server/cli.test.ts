@@ -2,7 +2,7 @@ import type { ChildProcess, SpawnOptions } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { afterEach, expect, test, vi } from 'vitest'
 import { readNdjson, type RunEvent } from '../src/lib/ndjson.ts'
-import { cliArgs, killAllClis, mapEvent, probeClis, runCli, type CliProvider } from './cli.ts'
+import { cliArgs, eventMapper, killAllClis, opencodeConfigText, probeClis, runCli, type CliProvider } from './cli.ts'
 
 // Each spawn runs a real node child that plays the given script, so pipes, exit codes and process groups are real.
 const fake = vi.hoisted(() => ({
@@ -30,7 +30,7 @@ afterEach(() => {
 const fixture = (name: string) => new URL(`./fixtures/${name}.jsonl`, import.meta.url)
 const replay = (name: string) => `process.stdout.write(require('fs').readFileSync(${JSON.stringify(fixture(name).pathname)}))`
 const lines = (name: string) => readFileSync(fixture(name), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
-const mapped = (provider: CliProvider, name: string) => lines(name).map(mapEvent[provider]).filter(Boolean)
+const mapped = (provider: CliProvider, name: string) => lines(name).map(eventMapper(provider)).filter(Boolean)
 
 const job = { modelName: 'm', system: 'sys', prompt: 'hi' }
 const claudeAuth = (method: string, run: string) =>
@@ -58,6 +58,50 @@ test('maps codex --json messages, usage and errors', () => {
   ])
   expect(mapped('codex', 'codex-json')[0]).toEqual({ t: 'delta', text: '{"n":0}' })
   expect(mapped('codex', 'codex-error')[0]).toEqual({ t: 'error', message: "The 'no-such-model' model is not supported when using Codex with a ChatGPT account." })
+})
+
+test('maps opencode --format json text parts and errors; usage stays absent without the final step_finish', () => {
+  expect(mapped('opencode', 'opencode-text')).toEqual([
+    { t: 'delta', text: 'I can call a tool. Let me list the files:' },
+    { t: 'delta', text: expect.stringContaining('NO TOOLS') },
+  ])
+  expect(mapped('opencode', 'opencode-error')).toEqual([{ t: 'error', message: 'Variant unavailable for opencode-go/kimi-k3: low' }])
+})
+
+test('opencode usage sums every step once the final step_finish arrives', () => {
+  const tokens = { input: 300, output: 20, reasoning: 5, cache: { read: 100, write: 10 } }
+  const final = { type: 'step_finish', part: { reason: 'stop', tokens } }
+  expect([...lines('opencode-text'), final].map(eventMapper('opencode')).filter((e) => e?.t === 'usage')).toEqual([
+    { t: 'usage', inputTokens: 326 + 410, outputTokens: 89 + 44 + 25, cachedInputTokens: 100, cacheWriteTokens: 10 },
+  ])
+})
+
+test('opencode config keeps {env:} and {file:} in the system prompt literal', () => {
+  const system = 'a {env:HOME} b {file:/etc/hostname} c'
+  const text = opencodeConfigText(system)
+  expect(text).not.toMatch(/\{(env|file):/)
+  expect(JSON.parse(text).agents.playground.system).toBe(system)
+})
+
+test('opencode runs standalone with a private deny-all config, the system prompt as its agent and the effort as #variant', async () => {
+  expect(cliArgs('opencode', { ...job, modelName: 'opencode-go/kimi-k3', effort: 'max' }, '/tmp/x')).toEqual(
+    expect.arrayContaining(['run', '--standalone', '--format', 'json', '--agent', 'playground', '-m', 'opencode-go/kimi-k3#max']),
+  )
+  expect(cliArgs('opencode', { ...job, modelName: 'opencode-go/kimi-k3' }, '/tmp/x').at(-1)).toBe('opencode-go/kimi-k3')
+  const deny = [{ action: '*', resource: '*', effect: 'deny' }]
+  expect(JSON.parse(opencodeConfigText('sys'))).toMatchObject({ permissions: deny, agents: { playground: { system: 'sys', permissions: deny } }, mcp: {}, plugins: [] })
+  vi.stubEnv('XDG_CONFIG_HOME', '/home/u/.config')
+  fake.scripts.opencode = `const c=JSON.parse(require('fs').readFileSync(process.env.XDG_CONFIG_HOME+'/opencode/opencode.json','utf8'));if(c.agents.playground.system!=='sys'||c.permissions[0].effect!=='deny')process.exit(5);${replay('opencode-text')}`
+  const events = await collect(runCli('opencode', job, new AbortController().signal))
+  expect(events.map((e) => e.t)).toEqual(['delta', 'delta', 'done'])
+  const { opts } = lastRun()
+  expect(opts.env).toMatchObject({
+    HOME: expect.stringContaining('playground-cli-'),
+    XDG_CONFIG_HOME: expect.stringContaining('playground-cli-'),
+    XDG_DATA_HOME: expect.not.stringContaining('playground-cli-'),
+    OPENCODE_DISABLE_PROJECT_CONFIG: '1',
+    OPENCODE_DISABLE_CLAUDE_CODE: '1',
+  })
 })
 
 test('runs claude in a removed temp dir with no tools, an allowlisted env and the prompt on stdin', async () => {
@@ -130,6 +174,16 @@ test('abort still kills a descendant that outlives the CLI and holds its stdout'
   await vi.waitFor(() => expect(() => process.kill(-child.pid!, 0)).toThrow())
 })
 
+test('abort also kills a descendant in its own process group, like opencode --standalone', async () => {
+  fake.scripts.opencode = `const s=require('child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});console.log(JSON.stringify({type:'text',part:{text:String(s.pid)}}));setInterval(()=>{},1000)`
+  const client = new AbortController()
+  const events = readNdjson(runCli('opencode', job, client.signal))
+  const server = Number(((await events.next()).value as { text: string }).text)
+  expect(() => process.kill(server, 0)).not.toThrow()
+  client.abort()
+  await vi.waitFor(() => expect(() => process.kill(server, 0)).toThrow())
+})
+
 test('killAllClis kills running CLIs on server shutdown', async () => {
   fake.scripts.codex = `console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'x'}}));setInterval(()=>{},1000)`
   const events = readNdjson(runCli('codex', job, new AbortController().signal))
@@ -147,13 +201,17 @@ test('a hung CLI is killed after the timeout', async () => {
 test('probe lists only installed CLIs logged in with a subscription', async () => {
   fake.scripts.claude = `console.log(JSON.stringify({loggedIn:true,authMethod:'claude.ai'}))`
   fake.scripts.codex = `console.error('Not logged in');process.exit(1)`
-  expect(await probeClis()).toEqual(['claude-code'])
+  fake.scripts.opencode = `console.log(JSON.stringify([{id:'opencode-go',name:'OpenCode Go',connections:[{type:'credential',label:'API key',method:'key'}]}]))`
+  expect(await probeClis()).toEqual(['claude-code', 'opencode'])
   expect(fake.calls.map((c) => [c.bin, ...c.args])).toEqual([
     ['claude', 'auth', 'status', '--json'],
     ['codex', 'login', 'status'],
+    ['opencode', 'auth', 'list', '--standalone', '--format', 'json'],
   ])
+  expect(fake.calls[2].opts.env).toHaveProperty('XDG_CONFIG_HOME', expect.stringContaining('playground-cli-'))
   fake.scripts.claude = `console.log(JSON.stringify({loggedIn:true,authMethod:'api_key'}))`
   fake.scripts.codex = `console.error('Logged in using an API key - sk-***')`
+  fake.scripts.opencode = `console.log(JSON.stringify([{id:'opencode',connections:[{}]},{id:'opencode-go',connections:[]}]))`
   expect(await probeClis()).toEqual([])
   fake.scripts.claude = `console.log(JSON.stringify({loggedIn:false}))`
   fake.scripts.codex = `console.error('Logged in using ChatGPT')`

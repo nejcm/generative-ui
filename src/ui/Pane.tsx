@@ -4,11 +4,11 @@ import { catalog } from '@/catalog/catalog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { cost, type Usage } from '@/lib/cost'
+import { cost, runCost, type Usage } from '@/lib/cost'
 import { sha256 } from '@/lib/hash'
 import { readNdjson, type RunEvent } from '@/lib/ndjson'
 import { strictOutputOf, type Run } from '@/lib/run'
-import { models as registry, type Effort, type Model } from '@/models'
+import { models as registry, type Model } from '@/models'
 import { fixtures } from '@/prompts'
 import { Choice } from './Choice'
 import { MetricsStrip } from './MetricsStrip'
@@ -19,7 +19,7 @@ export type PaneConfig = {
   key: string
   approach: Approach['id']
   modelId: string
-  settings: { temperature?: number; effort?: Effort }
+  settings: { temperature?: number; effort?: string }
   systemOverride?: string
 }
 
@@ -42,6 +42,7 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 export function Pane({ config, models, draft, batch, stopTick, loaded, onChange, onRemove }: Props) {
   const approach = approachById(config.approach) ?? approaches[0]
   const model = models.find((m) => m.id === config.modelId) ?? models[0]
+  const effort = config.settings.effort && model?.supports.effort?.includes(config.settings.effort) ? config.settings.effort : undefined
   const [result, setResult] = useState<{ approach: Approach; state: ParseState }>()
   const [metrics, setMetrics] = useState<Partial<Run['metrics']>>({})
   const [shownModelId, setShownModelId] = useState<string>()
@@ -60,11 +61,8 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
     const isCurrent = () => controllerRef.current === controller
     const fixture = req.fixtureId ? fixtures[req.fixtureId] : undefined
     const system = config.systemOverride ?? approach.systemPrompt({ catalog, fixture })
-    const { temperature, effort } = config.settings
-    const settings = {
-      temperature: model.supports.temperature ? temperature : undefined,
-      effort: effort && model.supports.effort?.includes(effort) ? effort : undefined,
-    }
+    const { temperature } = config.settings
+    const settings = { temperature: model.supports.temperature ? temperature : undefined, effort }
     const id = crypto.randomUUID()
     const createdAt = new Date().toISOString()
     const parser = approach.createParser()
@@ -219,14 +217,14 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
               onChange={(e) => set({ temperature: e.target.value === '' ? undefined : Number(e.target.value) })}
             />
           )}
-          {model?.supports.effort && (
+          {model?.supports.effort?.length ? (
             <Choice
               label="Effort"
-              value={config.settings.effort ?? ''}
-              options={[{ value: '', label: 'default effort' }, ...model.supports.effort.map((e) => ({ value: e, label: e }))]}
+              value={effort ?? ''}
+              options={[{ value: '', label: 'default' }, ...model.supports.effort.map((e) => ({ value: e, label: e }))]}
               onChange={(e) => set({ effort: e || undefined })}
             />
-          )}
+          ) : null}
           {running ? (
             <Button variant="destructive" onClick={() => controllerRef.current?.abort()}>
               Stop
@@ -239,8 +237,11 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
         </div>
         {model && !model.price && (
           <p className="text-xs text-muted-foreground">
-            Runs via your local CLI: start-up latency skews TTFT/TTFR, the harness adds its own context (Codex may include your global AGENTS
-            instructions), runs are read-only sandboxed but not tool-free, and usage counts against your plan.
+            Runs via your local CLI: start-up latency skews TTFT/TTFR,{' '}
+            {model.provider === 'opencode'
+              ? 'OpenCode adds environment details (working directory, model name) to the system prompt and sends each reply whole, all tools are denied, /etc/opencode and org well-known config still load, Go bills your credit balance past its quota if Extra Usage is on,'
+              : 'the harness adds its own context (Codex may include your global AGENTS instructions), runs are read-only sandboxed but not tool-free,'}{' '}
+            and usage counts against your plan.
           </p>
         )}
         <SystemPromptPanel
@@ -250,7 +251,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
         />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <MetricsStrip metrics={metrics} subscription={Boolean(shownModel && !shownModel.price)} saved={saved} onRate={(rating) => patch({ rating })} onNotes={(notes) => patch({ notes })} />
+        <MetricsStrip metrics={metrics} cost={runCost(shownModel, metrics.costUsd ?? null)} saved={saved} onRate={(rating) => patch({ rating })} onNotes={(notes) => patch({ notes })} />
         {notice && <p className="text-xs text-destructive">{notice}</p>}
         {result && <Result key={runKey} approach={result.approach} state={result.state} errors={metrics.errors ?? result.state.errors} />}
       </CardContent>

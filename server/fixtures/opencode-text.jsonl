@@ -1,0 +1,6 @@
+{"type":"step_start","timestamp":1792826810596,"part":{"type":"step-start"}}
+{"type":"text","timestamp":1792826812317,"part":{"type":"text","text":"I can call a tool. Let me list the files:","time":{"start":1792826811215,"end":1792826812317}}}
+{"type":"tool_use","timestamp":1792826812319,"part":{"type":"tool","tool":"execute","state":{"status":"error","input":{},"error":"No tool named \"execute\" is currently available. Please use a tool from the available tool list.","time":{"start":1792826812309,"end":1792826812319}}}}
+{"type":"step_finish","timestamp":1792826812321,"part":{"type":"step-finish","reason":"tool-calls","cost":0.0001154,"tokens":{"input":326,"output":89,"reasoning":44,"cache":{"read":0,"write":0}}}}
+{"type":"step_start","timestamp":1792826813632,"part":{"type":"step-start"}}
+{"type":"text","timestamp":1792826814091,"part":{"type":"text","text":"The tool call failed — no file-listing tool is actually available in this session, so I cannot list the directory contents.\n\nNO TOOLS","time":{"start":1792826812335,"end":1792826814091}}}
