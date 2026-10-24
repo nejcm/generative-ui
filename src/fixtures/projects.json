@@ -1,8 +1,19 @@
 {
-  "persona": { "name": "Mira Kovač", "role": "Product designer", "city": "Ljubljana" },
+  "persona": {
+    "name": "Mira Kovač",
+    "role": "Product designer",
+    "city": "Ljubljana",
+    "bio": "I design calm, usable software for public services and small teams. Ten years across research, interaction design and front-end prototyping.",
+    "availability": "Open to freelance work from January",
+    "email": "mira@example.com",
+    "links": ["Dribbble", "LinkedIn", "Read.cv"],
+    "stats": [{ "label": "Years designing", "value": "10" }, { "label": "Products shipped", "value": "24" }, { "label": "People reached", "value": "1.2M" }],
+    "skills": ["Interaction design", "User research", "Design systems", "Prototyping", "Service design"]
+  },
   "projects": [
-    { "title": "Transit app redesign", "year": 2026, "summary": "Cut trip-planning taps from 7 to 3 for 400k riders.", "tags": ["mobile", "research"] },
-    { "title": "Clinic booking system", "year": 2025, "summary": "Self-serve booking that halved front-desk calls.", "tags": ["web", "service design"] },
-    { "title": "Open data dashboard", "year": 2024, "summary": "City budget explorer used by 30k residents.", "tags": ["data viz"] }
-  ]
+    { "title": "Transit app redesign", "year": 2026, "role": "Lead designer", "client": "Ljubljana Public Transport", "summary": "Cut trip-planning taps from 7 to 3 for 400k riders.", "outcome": "App store rating rose from 3.4 to 4.6 in six months.", "tags": ["mobile", "research"] },
+    { "title": "Clinic booking system", "year": 2025, "role": "Product designer", "client": "Zdravje Clinics", "summary": "Self-serve booking that halved front-desk calls.", "outcome": "58% fewer booking calls; 91% of patients book online.", "tags": ["web", "service design"] },
+    { "title": "Open data dashboard", "year": 2024, "role": "Design and front-end", "client": "City of Ljubljana", "summary": "City budget explorer used by 30k residents.", "outcome": "Featured by two national newspapers; open-sourced.", "tags": ["data viz"] }
+  ],
+  "testimonial": { "quote": "Mira turned a tangle of requirements into something our riders actually enjoy using.", "author": "Tina Zupan", "role": "Head of Digital, LPP" }
 }

@@ -2,7 +2,7 @@ import type { Spec } from '@json-render/core'
 import { parsePartialJson } from 'ai'
 import { createsCycle, finalSpecErrors, SpecView, validateElement } from '@/catalog/catalog'
 import { componentProps, type ComponentName } from '@/catalog/schema'
-import { fixtureBlock, stripFences, type Approach, type ParseError, type ParseState, type Parser } from './types'
+import { designBrief, fixtureBlock, stripFences, type Approach, type ParseError, type ParseState, type Parser } from './types'
 
 // Props as {key, value} strings: a per-type props union breaks Anthropic strict-mode limits
 // (≤16 union-typed and ≤24 optional params per request): platform.claude.com/docs/en/build-with-claude/structured-outputs
@@ -173,7 +173,7 @@ export const flatStrict: Approach = {
       '',
       'AVAILABLE COMPONENTS:',
       ...componentLines(catalog.prompt()),
-    ].join('\n') + fixtureBlock(fixture),
+    ].join('\n') + designBrief + fixtureBlock(fixture),
   output: { kind: 'json-schema', schema: flatSchema },
   createParser,
   Renderer: ({ state }) => <SpecView spec={state.spec ?? null} />,

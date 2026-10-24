@@ -1,16 +1,30 @@
 {
   "period": "2026-Q3",
+  "previousPeriod": "2026-Q2",
   "currency": "EUR",
   "totals": { "revenue": 184200, "orders": 2310, "avgOrder": 79.7, "returningCustomers": 0.42 },
+  "previousTotals": { "revenue": 161800, "orders": 2105, "avgOrder": 76.9, "returningCustomers": 0.39 },
+  "weeklyNote": "Last 8 of 13 weeks in the quarter",
   "weekly": [
     { "week": "W27", "revenue": 12100 }, { "week": "W28", "revenue": 13350 }, { "week": "W29", "revenue": 12800 },
     { "week": "W30", "revenue": 14920 }, { "week": "W31", "revenue": 15400 }, { "week": "W32", "revenue": 13900 },
     { "week": "W33", "revenue": 16210 }, { "week": "W34", "revenue": 17030 }
   ],
-  "byChannel": [ { "channel": "Web", "revenue": 98100 }, { "channel": "Mobile", "revenue": 61400 }, { "channel": "Retail", "revenue": 24700 } ],
+  "byChannel": [
+    { "channel": "Web", "revenue": 98100, "orders": 1190, "growth": 0.2 },
+    { "channel": "Mobile", "revenue": 61400, "orders": 830, "growth": 0.13 },
+    { "channel": "Retail", "revenue": 24700, "orders": 290, "growth": -0.04 }
+  ],
   "topProducts": [
-    { "name": "Trail Runner 3", "units": 412, "revenue": 45320 },
-    { "name": "Rain Shell", "units": 288, "revenue": 37440 },
-    { "name": "Merino Tee", "units": 905, "revenue": 31675 }
+    { "name": "Trail Runner 3", "category": "Footwear", "units": 412, "revenue": 45320, "stock": "in stock" },
+    { "name": "Rain Shell", "category": "Outerwear", "units": 288, "revenue": 37440, "stock": "low stock" },
+    { "name": "Merino Tee", "category": "Apparel", "units": 905, "revenue": 31675, "stock": "in stock" },
+    { "name": "Summit Pack 28L", "category": "Gear", "units": 190, "revenue": 22800, "stock": "in stock" },
+    { "name": "Trail Socks 3-pack", "category": "Apparel", "units": 1180, "revenue": 17700, "stock": "out of stock" }
+  ],
+  "recentOrders": [
+    { "id": "SO-20418", "customer": "Ana Horvat", "channel": "Web", "total": 142.5, "status": "shipped" },
+    { "id": "SO-20417", "customer": "Luka Novak", "channel": "Mobile", "total": 89.9, "status": "processing" },
+    { "id": "SO-20416", "customer": "Eva Kranjc", "channel": "Retail", "total": 220.0, "status": "delivered" }
   ]
 }

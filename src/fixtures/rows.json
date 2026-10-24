@@ -1,8 +1,12 @@
 [
-  { "id": 1041, "customer": "Ada Lovelace", "status": "paid", "amount": 240.0, "date": "2026-10-02" },
-  { "id": 1042, "customer": "Linus Torvalds", "status": "pending", "amount": 89.5, "date": "2026-10-03" },
-  { "id": 1043, "customer": "Grace Hopper", "status": "refunded", "amount": 120.0, "date": "2026-10-05" },
-  { "id": 1044, "customer": "Alan Turing", "status": "paid", "amount": 310.25, "date": "2026-10-08" },
-  { "id": 1045, "customer": "Margaret Hamilton", "status": "paid", "amount": 64.0, "date": "2026-10-11" },
-  { "id": 1046, "customer": "Ken Thompson", "status": "pending", "amount": 199.99, "date": "2026-10-14" }
+  { "id": 1041, "customer": "Ada Lovelace", "email": "ada@example.com", "status": "paid", "amount": 240.0, "date": "2026-10-02", "items": 3, "method": "Card" },
+  { "id": 1042, "customer": "Linus Torvalds", "email": "linus@example.com", "status": "pending", "amount": 89.5, "date": "2026-10-03", "items": 1, "method": "Bank transfer" },
+  { "id": 1043, "customer": "Grace Hopper", "email": "grace@example.com", "status": "refunded", "amount": 120.0, "date": "2026-10-05", "items": 2, "method": "Card" },
+  { "id": 1044, "customer": "Alan Turing", "email": "alan@example.com", "status": "paid", "amount": 310.25, "date": "2026-10-08", "items": 4, "method": "PayPal" },
+  { "id": 1045, "customer": "Margaret Hamilton", "email": "margaret@example.com", "status": "paid", "amount": 64.0, "date": "2026-10-11", "items": 1, "method": "Card" },
+  { "id": 1046, "customer": "Ken Thompson", "email": "ken@example.com", "status": "pending", "amount": 199.99, "date": "2026-10-14", "items": 2, "method": "Bank transfer" },
+  { "id": 1047, "customer": "Barbara Liskov", "email": "barbara@example.com", "status": "paid", "amount": 455.0, "date": "2026-10-15", "items": 5, "method": "Card" },
+  { "id": 1048, "customer": "Dennis Ritchie", "email": "dennis@example.com", "status": "failed", "amount": 72.4, "date": "2026-10-17", "items": 1, "method": "Card" },
+  { "id": 1049, "customer": "Radia Perlman", "email": "radia@example.com", "status": "paid", "amount": 138.0, "date": "2026-10-19", "items": 2, "method": "PayPal" },
+  { "id": 1050, "customer": "Donald Knuth", "email": "donald@example.com", "status": "pending", "amount": 520.75, "date": "2026-10-21", "items": 6, "method": "Bank transfer" }
 ]

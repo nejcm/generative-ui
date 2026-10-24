@@ -1,10 +1,10 @@
 import { useBoundProp, type BaseComponentProps } from '@json-render/react'
 import { Children, useId, useState, type ReactNode } from 'react'
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis } from 'recharts'
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, LabelList, Line, LineChart, Pie, PieChart, XAxis, YAxis } from 'recharts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
+import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -35,6 +35,9 @@ const textClass = { body: '', lead: 'text-lg', muted: 'text-sm text-muted-foregr
 const aspectClass = { square: 'aspect-square', video: 'aspect-video', wide: 'aspect-[21/9]', auto: '' }
 const trendClass = { up: 'text-emerald-600', down: 'text-red-600', neutral: 'text-muted-foreground' }
 const chartConfig: ChartConfig = { value: { label: 'Value', color: 'var(--chart-1)' } }
+
+const pieConfig = (data: { label: string }[]): ChartConfig =>
+  Object.fromEntries(data.map(({ label }) => [label, { label }]))
 
 const Stack: Impl<'Stack'> = ({ props, children }) => (
   <div
@@ -165,20 +168,24 @@ const BadgeImpl: Impl<'Badge'> = ({ props }) => <Badge variant={props.variant}>{
 
 const Chart: Impl<'Chart'> = ({ props }) => {
   const axis = <XAxis dataKey="label" tickLine={false} axisLine={false} />
+  const yAxis = <YAxis tickLine={false} axisLine={false} width={44} />
   const tooltip = <ChartTooltip content={<ChartTooltipContent />} />
   const chart = {
     bar: (
-      <BarChart data={props.data}>
+      <BarChart data={props.data} margin={{ top: 24 }}>
         <CartesianGrid vertical={false} />
         {axis}
         {tooltip}
-        <Bar dataKey="value" fill="var(--color-value)" radius={4} />
+        <Bar dataKey="value" fill="var(--color-value)" radius={4}>
+          <LabelList dataKey="value" position="top" className="fill-foreground text-xs" />
+        </Bar>
       </BarChart>
     ),
     line: (
       <LineChart data={props.data}>
         <CartesianGrid vertical={false} />
         {axis}
+        {yAxis}
         {tooltip}
         <Line dataKey="value" stroke="var(--color-value)" strokeWidth={2} />
       </LineChart>
@@ -187,6 +194,7 @@ const Chart: Impl<'Chart'> = ({ props }) => {
       <AreaChart data={props.data}>
         <CartesianGrid vertical={false} />
         {axis}
+        {yAxis}
         {tooltip}
         <Area dataKey="value" fill="var(--color-value)" stroke="var(--color-value)" fillOpacity={0.3} />
       </AreaChart>
@@ -199,13 +207,14 @@ const Chart: Impl<'Chart'> = ({ props }) => {
             <Cell key={i} fill={`var(--chart-${(i % 5) + 1})`} />
           ))}
         </Pie>
+        <ChartLegend content={<ChartLegendContent nameKey="label" />} />
       </PieChart>
     ),
   }[props.type]
   return (
     <div className="flex flex-col gap-2">
       {props.title && <span className="text-sm font-medium">{props.title}</span>}
-      <ChartContainer config={chartConfig} className="min-h-48 w-full">
+      <ChartContainer config={props.type === 'pie' ? pieConfig(props.data) : chartConfig} className="min-h-48 w-full">
         {chart}
       </ChartContainer>
     </div>

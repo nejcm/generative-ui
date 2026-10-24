@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { fixtureBlock, stripFences, type Approach, type ParseState, type Parser } from './types'
+import { designBrief, fixtureBlock, stripFences, type Approach, type ParseState, type Parser } from './types'
 
 const CSP = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:"
 const contentTag = /<body[\s>]|<(?!\/|!|html[\s>]|head[\s>]|meta[\s>]|title[\s>]|style[\s>]|link[\s>]|script[\s>])[a-z]/i
@@ -50,7 +50,8 @@ export const html: Approach = {
   id: 'html',
   label: 'C · raw HTML (sandboxed iframe)',
   systemPrompt: ({ fixture }) =>
-    'Return one self-contained HTML document. Inline CSS/JS only. No external requests. No markdown, no code fences, no prose.' +
+    'Return one self-contained HTML document. Inline CSS/JS only. No external requests. No markdown, no code fences, no prose. Responsive layout, system fonts, a restrained colour palette with light and dark support.' +
+    designBrief +
     fixtureBlock(fixture),
   output: { kind: 'text' },
   createParser,

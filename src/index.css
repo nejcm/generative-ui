@@ -69,11 +69,11 @@
     --border: var(--g-border);
     --input: var(--control);
     --ring: var(--focus);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    --chart-1: oklch(0.62 0.17 255);
+    --chart-2: oklch(0.7 0.13 185);
+    --chart-3: oklch(0.78 0.15 80);
+    --chart-4: oklch(0.6 0.18 300);
+    --chart-5: oklch(0.65 0.2 15);
     --radius: 0.4375rem;
 }
 

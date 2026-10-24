@@ -1,5 +1,5 @@
 [
-  { "name": "Aero 14", "price": 1299, "weightKg": 1.2, "batteryH": 18, "screen": "14\" OLED", "rating": 4.6 },
-  { "name": "Forge 16", "price": 1899, "weightKg": 2.1, "batteryH": 9, "screen": "16\" IPS 165Hz", "rating": 4.4 },
-  { "name": "Nimbus 13", "price": 999, "weightKg": 1.0, "batteryH": 22, "screen": "13\" IPS", "rating": 4.2 }
+  { "name": "Aero 14", "tagline": "Light, bright, long-lasting", "price": 1299, "weightKg": 1.2, "batteryH": 18, "screen": "14\" OLED", "cpu": "8-core, 15 W", "ramGb": 16, "storageGb": 512, "ports": ["2x USB-C", "HDMI", "headphone"], "rating": 4.6, "reviews": 1840, "pros": ["Gorgeous OLED panel", "Great battery", "Quiet under load"], "cons": ["Soldered RAM", "Glossy screen"], "bestFor": "Travel and everyday work" },
+  { "name": "Forge 16", "tagline": "Desktop power on the go", "price": 1899, "weightKg": 2.1, "batteryH": 9, "screen": "16\" IPS 165Hz", "cpu": "16-core, 55 W", "ramGb": 32, "storageGb": 1024, "ports": ["2x USB-C", "3x USB-A", "HDMI", "Ethernet", "SD card"], "rating": 4.4, "reviews": 960, "pros": ["Fastest of the three", "Upgradeable RAM and SSD", "Full port selection"], "cons": ["Heavy", "Fans are audible"], "bestFor": "Video editing, 3D and gaming" },
+  { "name": "Nimbus 13", "tagline": "Everything you need, for less", "price": 999, "weightKg": 1.0, "batteryH": 22, "screen": "13\" IPS", "cpu": "6-core, 15 W", "ramGb": 16, "storageGb": 256, "ports": ["2x USB-C", "headphone"], "rating": 4.2, "reviews": 2310, "pros": ["Lightest", "Best battery life", "Lowest price"], "cons": ["Dimmer screen", "Small SSD"], "bestFor": "Students and light office work" }
 ]

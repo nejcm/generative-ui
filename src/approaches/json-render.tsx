@@ -1,6 +1,6 @@
 import { applySpecStreamPatch, parseSpecStreamLine, type Spec, type SpecStreamLine } from '@json-render/core'
 import { createsCycle, finalSpecErrors, SpecView, validateElement } from '@/catalog/catalog'
-import { fixtureBlock, type Approach, type ParseError, type Parser } from './types'
+import { designBrief, fixtureBlock, type Approach, type ParseError, type Parser } from './types'
 
 // The pinned core walks inherited keys, so these would write to Object.prototype.
 const unsafeTokens = new Set(['__proto__', 'prototype', 'constructor'])
@@ -71,7 +71,7 @@ function createParser(): Parser {
 export const jsonRender: Approach = {
   id: 'json-render',
   label: 'A · json-render SpecStream',
-  systemPrompt: ({ catalog, fixture }) => catalog.prompt() + fixtureBlock(fixture),
+  systemPrompt: ({ catalog, fixture }) => catalog.prompt() + designBrief + fixtureBlock(fixture),
   output: { kind: 'text' },
   createParser,
   Renderer: ({ state }) => <SpecView spec={state.spec ?? null} />,
