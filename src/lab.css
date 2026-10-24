@@ -13,8 +13,7 @@ body{margin:0;background:var(--frame)}
 .shell{display:grid;grid-template-columns:228px minmax(0,1fr);min-height:100vh;background:var(--frame)}
 .side{display:flex;flex-direction:column;gap:2px;padding:12px 10px 12px 12px;min-width:0;position:sticky;top:0;height:100vh;overflow:auto}
 .brand{display:flex;align-items:center;gap:10px;height:40px;padding:0 6px;margin-bottom:10px}
-.brand-mark{position:relative;width:26px;height:26px;border-radius:7px;background:var(--fg);flex:none}
-.brand-mark::after{content:'';position:absolute;left:6px;right:6px;bottom:7px;height:3px;border-radius:2px;background:var(--signal-fill)}
+.brand-mark{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:var(--fg);color:var(--bg);flex:none}
 .brand b{display:block;font-size:13.5px;font-weight:600;line-height:1.2}
 .brand small{display:block;font-size:11.5px;color:var(--fg-3)}
 .snav button{display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--fg-2);font-size:13.5px;cursor:pointer;text-align:left}
@@ -26,8 +25,13 @@ body{margin:0;background:var(--frame)}
 .srow{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:8px;align-items:center;width:100%;height:30px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--fg-2);font-size:12.5px;cursor:pointer;text-align:left}
 .srow:hover{background:var(--active);color:var(--fg)}
 .srow span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sfoot{margin-top:auto;padding:16px 8px 4px;display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--fg-2)}
-.sfoot div{display:flex;align-items:center;gap:6px}
+.sfoot{margin-top:auto;padding-top:16px;display:flex;flex-direction:column;gap:2px}
+.sfoot button{display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--fg-2);font-size:13.5px;cursor:pointer;text-align:left}
+.sfoot button:hover{background:var(--active);color:var(--fg)}
+.sfoot button svg{color:var(--fg-3);flex:none}
+.sfoot .pop-wrap{position:relative}
+.sfoot .sub{position:absolute;left:0;right:0;bottom:calc(100% + 4px);z-index:10;display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--panel);border:1px solid var(--line-strong);border-radius:9px;box-shadow:0 6px 20px rgb(0 0 0/.14);font-size:12px;color:var(--fg-2)}
+.sfoot .sub div{display:flex;align-items:center;gap:6px}
 .top{display:flex;align-items:center;gap:12px;height:48px;padding:0 20px 0 8px}
 .crumbs{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--fg-3);min-width:0;white-space:nowrap;overflow:hidden}
 .crumbs strong{color:var(--fg);font-weight:500}

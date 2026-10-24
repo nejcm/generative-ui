@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowDown, ArrowUp, Check, Copy, FlaskConical, History as HistoryIcon, Plus, Square, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Copy, FlaskConical, History as HistoryIcon, Moon, Plug, Plus, Square, Sun, X } from 'lucide-react'
 import { approachById, approaches } from '@/approaches'
 import { usd } from '@/lib/cost'
 import type { Run, RunSummary } from '@/lib/run'
@@ -59,8 +59,28 @@ function finding(panes: PaneConfig[], summaries: Record<string, LaneSummary>) {
   return `${shortOf(approachById(first.approach)!)} on ${model} rendered first, at ${secs(first.metrics.ttfrMs)}. ${valid} of ${ran.length} valid.`
 }
 
+function toggleTheme(dark: boolean) {
+  const theme = dark ? 'light' : 'dark'
+  document.documentElement.dataset.theme = theme
+  localStorage.setItem('theme', theme)
+}
+
 export default function App() {
   const [page, setPage] = useState<Page>('lab')
+  const [dark, setDark] = useState(() => document.documentElement.dataset.theme === 'dark')
+  const [provOpen, setProvOpen] = useState(false)
+  useEffect(() => {
+    if (!provOpen) return
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !(e.target as Element).closest('.pop-wrap')) setProvOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', close)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', close)
+    }
+  }, [provOpen])
   const [models, setModels] = useState<Model[]>()
   const [panes, setPanes] = useState(loadPanes)
   const [loaded, setLoaded] = useState<Record<string, Run>>({})
@@ -143,7 +163,13 @@ export default function App() {
     <div className="gul shell">
       <aside className="side">
         <div className="brand">
-          <span className="brand-mark" aria-hidden />
+          <span className="brand-mark" aria-hidden>
+            <svg viewBox="0 0 32 32" width="20" height="20">
+              <rect x="5" y="7" width="22" height="4.5" rx="1.5" fill="#FFB224" />
+              <rect x="5" y="13.75" width="15" height="4.5" rx="1.5" fill="currentColor" />
+              <rect x="5" y="20.5" width="9" height="4.5" rx="1.5" fill="currentColor" />
+            </svg>
+          </span>
           <div>
             <b>Generative UI Lab</b>
             <small className="mono">{location.host}</small>
@@ -175,17 +201,37 @@ export default function App() {
             ))}
           </>
         )}
-        <div className="sfoot" aria-label="Providers">
-          {models &&
-            providers.map(([id, label]) => {
-              const on = models.some((m) => m.provider === id)
-              return (
-                <div key={id} className={on ? undefined : 'muted'}>
-                  {on ? <Check size={13} className="v-ok" /> : <X size={13} />}
-                  {label}
-                </div>
-              )
-            })}
+        <div className="sfoot">
+          <div className="pop-wrap">
+            <button type="button" aria-expanded={provOpen} onClick={() => setProvOpen((o) => !o)}>
+              <Plug size={16} />
+              Providers
+            </button>
+            {provOpen && (
+              <div className="sub" role="menu" aria-label="Providers">
+                {models &&
+                  providers.map(([id, label]) => {
+                    const on = models.some((m) => m.provider === id)
+                    return (
+                      <div key={id} className={on ? undefined : 'muted'}>
+                        {on ? <Check size={13} className="v-ok" /> : <X size={13} />}
+                        {label}
+                      </div>
+                    )
+                  })}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              toggleTheme(dark)
+              setDark(!dark)
+            }}
+          >
+            {dark ? <Sun size={16} /> : <Moon size={16} />}
+            {dark ? 'Light theme' : 'Dark theme'}
+          </button>
         </div>
       </aside>
       <div className="main">

@@ -77,8 +77,7 @@
     --radius: 0.4375rem;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
+:root[data-theme='dark'] {
         color-scheme: dark;
         --frame: #08090A; --bg: #111315; --panel: #111315; --panel-2: #171A1D; --sunken: #0C0E10;
         --line: #23272B; --line-strong: #3A4148; --control: #3A4148; --active: #1D2125;
@@ -87,7 +86,6 @@
         --ok: #4CCB8D; --ok-soft: #10261B; --err: #FF7A6E; --err-soft: #2E1411;
         --ap-a: #7FAAF0; --ap-b: #3FC7BE; --ap-c: #EC86BF; --ap-ink: #0B0D0F; --sk: #1D2125;
         --g-bg: #15181B; --g-card: #191D21; --g-fg: #ECEEF0; --g-muted: #9AA2AC; --g-border: #2A3037; --g-subtle: #1D2227;
-    }
 }
 
 @layer base {
