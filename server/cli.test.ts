@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
 import { readNdjson, type RunEvent } from '../src/lib/ndjson.ts'
-import { cliArgs, eventMapper, killAllClis, opencodeConfigText, probeClis, runCli, type CliProvider } from './cli.ts'
+import { cliArgs, codexSession, eventMapper, killAllClis, opencodeConfigText, probeClis, runCli, type CliProvider } from './cli.ts'
 
 // Each spawn runs a real node child that plays the given script, so pipes, exit codes and process groups are real.
 const fake = vi.hoisted(() => ({
@@ -38,7 +38,7 @@ afterEach(() => {
 const fixture = (name: string) => new URL(`./fixtures/${name}.jsonl`, import.meta.url)
 const replay = (name: string) => `process.stdout.write(require('fs').readFileSync(${JSON.stringify(fixture(name).pathname)}))`
 const lines = (name: string) => readFileSync(fixture(name), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
-const mapped = (provider: CliProvider, name: string) => lines(name).map(eventMapper(provider)).filter(Boolean)
+const mapped = (provider: Exclude<CliProvider, 'codex'>, name: string) => lines(name).map(eventMapper(provider)).filter(Boolean)
 
 const job = { modelName: 'm', system: 'sys', prompt: 'hi' }
 const claudeAuth = (method: string, run: string) =>
@@ -59,15 +59,32 @@ test('maps claude stream-json text deltas and result usage', () => {
   expect(mapped('claude-code', 'claude-error')).toEqual([{ t: 'error', message: expect.stringContaining('issue with the selected model') }])
 })
 
-test('maps codex --json messages, usage and errors', () => {
-  expect(mapped('codex', 'codex-text')).toEqual([
-    { t: 'delta', text: 'PINEAPPLE' },
-    { t: 'usage', inputTokens: 9226, outputTokens: 7, cachedInputTokens: 3200, cacheWriteTokens: 0 },
-  ])
-  expect(mapped('codex', 'codex-json')[0]).toEqual({ t: 'delta', text: '{"n":0}' })
-  expect(mapped('codex', 'codex-error')[0]).toEqual({ t: 'error', message: "The 'no-such-model' model is not supported when using Codex with a ChatGPT account." })
+test('codex session walks initialize, thread/start and turn/start, then streams deltas and usage', () => {
+  const session = codexSession({ ...job, effort: 'low', schema: { type: 'integer' } }, '/tmp/x/cwd')
+  expect(JSON.parse(session.start)).toMatchObject({ id: 1, method: 'initialize' })
+  const [initialized, threadStart] = session.handle({ id: 1, result: {} }).write!.trim().split('\n').map((l) => JSON.parse(l))
+  expect(initialized).toEqual({ method: 'initialized' })
+  expect(threadStart).toMatchObject({ id: 2, method: 'thread/start', params: { model: 'm', sandbox: 'read-only', approvalPolicy: 'never', ephemeral: true, cwd: '/tmp/x/cwd' } })
+  expect(JSON.parse(session.handle({ id: 2, result: { thread: { id: 'th' } } }).write!)).toMatchObject({
+    id: 3,
+    method: 'turn/start',
+    params: { threadId: 'th', effort: 'low', outputSchema: { type: 'integer' }, input: [{ type: 'text', text: 'hi' }] },
+  })
+  expect(session.handle({ method: 'item/agentMessage/delta', params: { delta: 'PINE' } })).toEqual({ event: { t: 'delta', text: 'PINE' } })
+  session.handle({ method: 'thread/tokenUsage/updated', params: { tokenUsage: { last: { inputTokens: 100, cachedInputTokens: 60, cacheWriteInputTokens: 0, outputTokens: 7 } } } })
+  expect(session.handle({ method: 'turn/completed', params: { turn: { status: 'completed' } } })).toEqual({
+    done: true,
+    event: { t: 'usage', inputTokens: 100, outputTokens: 7, cachedInputTokens: 60, cacheWriteTokens: 0 },
+  })
 })
 
+test('codex session unwraps upstream errors and refuses server requests', () => {
+  const session = codexSession(job, '/c')
+  const wrapped = JSON.stringify({ type: 'error', error: { message: "The 'no-such-model' model is not supported." } })
+  expect(session.handle({ method: 'error', params: { willRetry: false, error: { message: wrapped } } })).toEqual({ done: true, event: { t: 'error', message: "The 'no-such-model' model is not supported." } })
+  expect(session.handle({ method: 'turn/completed', params: { turn: { status: 'failed', error: { message: 'boom' } } } })).toEqual({ done: true, event: { t: 'error', message: 'boom' } })
+  expect(JSON.parse(session.handle({ id: 9, method: 'item/commandExecution/requestApproval', params: {} }).write!)).toMatchObject({ id: 9, error: { code: -32601 } })
+})
 test('maps opencode --format json text parts and errors; usage stays absent without the final step_finish', () => {
   expect(mapped('opencode', 'opencode-text')).toEqual([
     { t: 'delta', text: 'I can call a tool. Let me list the files:' },
@@ -159,12 +176,23 @@ test('runs claude in a removed temp dir with no tools, an allowlisted env and th
   expect(existsSync(opts.cwd as string)).toBe(false)
 })
 
-test('codex gets the system prompt and schema as files inside its temp dir', async () => {
-  const args = cliArgs('codex', { ...job, schema: { type: 'integer' } }, '/tmp/x')
-  expect(args).toEqual(expect.arrayContaining(['-s', 'read-only', '-C', '/tmp/x/cwd', '-c', 'model_instructions_file="/tmp/x/system.md"', '--output-schema', '/tmp/x/schema.json']))
-  fake.scripts.codex = `const fs=require('fs');if(fs.readFileSync('../system.md','utf8')!=='sys'||!fs.readFileSync('../schema.json','utf8').includes('integer'))process.exit(4);${replay('codex-json')}`
+// A stand-in app-server: answers each request line the way the real one does, then plays `after` once the turn starts.
+const appServer = (after: string) =>
+  `const rl=require('readline').createInterface({input:process.stdin});const out=o=>console.log(JSON.stringify(o));
+rl.on('line',l=>{const m=JSON.parse(l);if(m.method==='initialize')out({id:m.id,result:{}});
+else if(m.method==='thread/start')out({id:m.id,result:{thread:{id:'th'}}});
+else if(m.method==='turn/start'){out({id:m.id,result:{turn:{id:'t'}}});${after}}})`
+
+test('codex gets the system prompt as a file and the schema in turn/start, with a private CODEX_HOME', async () => {
+  const args = cliArgs('codex', job, '/tmp/x')
+  expect(args).toEqual(expect.arrayContaining(['app-server', '-c', 'model_instructions_file="/tmp/x/system.md"']))
+  fake.scripts.codex = appServer(`if(require('fs').readFileSync('../system.md','utf8')!=='sys'||!JSON.stringify(m.params.outputSchema).includes('integer'))process.exit(4);
+out({method:'item/agentMessage/delta',params:{delta:'{"n":0}'}});out({method:'turn/completed',params:{turn:{status:'completed'}}})`)
   const events = await collect(runCli('codex', { ...job, schema: { type: 'integer' } }, new AbortController().signal))
   expect(events.map((e) => e.t)).toEqual(['delta', 'usage', 'done'])
+  const { opts } = lastRun()
+  expect((opts.env as Record<string, string>).CODEX_HOME).toMatch(/playground-cli-.*codex-home$/)
+  expect(lastRun().child.signalCode).toBe('SIGKILL')
 })
 
 test('claude refuses to run when its login switched away from the subscription after the probe', async () => {
@@ -176,7 +204,7 @@ test('claude refuses to run when its login switched away from the subscription a
 })
 
 test('a CLI error yields one error event, even with a non-zero exit', async () => {
-  fake.scripts.codex = `${replay('codex-error')};process.exitCode=1`
+  fake.scripts.codex = appServer(`out({method:'error',params:{willRetry:false,error:{message:'not supported'}}});out({method:'turn/completed',params:{turn:{status:'failed',error:{message:'not supported'}}}});process.exitCode=1`)
   const events = await collect(runCli('codex', job, new AbortController().signal))
   expect(events).toEqual([{ t: 'error', message: expect.stringContaining('not supported') }])
 })
@@ -220,7 +248,7 @@ test('abort also kills a descendant in its own process group, like opencode --st
 })
 
 test('killAllClis kills running CLIs on server shutdown', async () => {
-  fake.scripts.codex = `console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'x'}}));setInterval(()=>{},1000)`
+  fake.scripts.codex = `console.log(JSON.stringify({method:'item/agentMessage/delta',params:{delta:'x'}}));setInterval(()=>{},1000)`
   const events = readNdjson(runCli('codex', job, new AbortController().signal))
   await events.next()
   killAllClis()
@@ -254,4 +282,14 @@ test('probe lists only installed CLIs logged in with a subscription', async () =
   expect(await probeClis()).toEqual(['codex'])
   vi.stubEnv('PLAYGROUND_CLI', 'off')
   expect(await probeClis()).toEqual([])
+})
+
+test('codex session ends on a JSON-RPC request error', () => {
+  expect(codexSession(job, '/c').handle({ id: 2, error: { message: 'bad request' } })).toEqual({ done: true, event: { t: 'error', message: 'bad request' } })
+})
+
+test('only app-server runs get the private CODEX_HOME, not the login probe', async () => {
+  fake.scripts.codex = 'process.exit(0)'
+  await collect(runCli('codex', job, new AbortController().signal))
+  expect((lastRun().opts.env as Record<string, string>).CODEX_HOME).toMatch(/codex-home$/)
 })

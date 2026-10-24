@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
@@ -66,7 +66,7 @@ const codexOff = ['shell_tool', 'unified_exec', 'apps', 'plugins', 'hooks', 'mul
 
 type Job = { modelName: string; system: string; prompt: string; effort?: string; schema?: Record<string, unknown> }
 
-export function cliArgs(provider: CliProvider, { modelName, system, effort, schema }: Job, dir: string): string[] {
+export function cliArgs(provider: CliProvider, { modelName, system, effort }: Job, dir: string): string[] {
   if (provider === 'opencode')
     return ['run', '--standalone', '--format', 'json', '--agent', 'playground', '--title', 'playground', '-m', effort ? `${modelName}#${effort}` : modelName]
   if (provider === 'claude-code')
@@ -85,16 +85,9 @@ export function cliArgs(provider: CliProvider, { modelName, system, effort, sche
       '--model', modelName,
       ...(effort ? ['--effort', effort] : []),
     ]
+  // app-server instead of exec: exec --json reports the reply only once finished, app-server streams agent message deltas.
   return [
-    'exec',
-    '--json',
-    '--ephemeral',
-    '--skip-git-repo-check',
-    '--ignore-user-config',
-    '--ignore-rules',
-    '-s', 'read-only',
-    '-C', join(dir, 'cwd'),
-    '-m', modelName,
+    'app-server',
     '-c', `model_instructions_file=${JSON.stringify(join(dir, 'system.md'))}`,
     '-c', 'include_permissions_instructions=false',
     '-c', 'include_environment_context=false',
@@ -107,9 +100,6 @@ export function cliArgs(provider: CliProvider, { modelName, system, effort, sche
     '-c', 'memories.use_memories=false',
     '-c', 'memories.generate_memories=false',
     ...codexOff.flatMap((feature) => ['--disable', feature]),
-    ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []),
-    ...(schema ? ['--output-schema', join(dir, 'schema.json')] : []),
-    '-',
   ]
 }
 
@@ -136,7 +126,37 @@ const unwrap = (message: string) => {
   }
 }
 
-const mapEvent: Record<Exclude<CliProvider, 'opencode'>, (e: CliEvent) => RunEvent | undefined> = {
+type CodexMessage = { id?: number; method?: string; params?: any; result?: any; error?: { message: string } }
+
+// Drives `codex app-server` (JSON-RPC lines over stdio): initialize, thread/start, turn/start, then deltas until turn/completed.
+export function codexSession({ modelName, prompt, effort, schema }: Job, cwd: string) {
+  let nextId = 0
+  const request = (method: string, params: unknown) => JSON.stringify({ id: ++nextId, method, params }) + '\n'
+  let last: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteInputTokens: number } | undefined
+  const fail = (message: string) => ({ event: { t: 'error', message: unwrap(message) } as RunEvent })
+  return {
+    start: request('initialize', { clientInfo: { name: 'playground', title: null, version: '0' }, capabilities: null }),
+    handle(m: CodexMessage): { write?: string; event?: RunEvent; done?: boolean } {
+      if (m.id !== undefined && m.method) return { write: JSON.stringify({ id: m.id, error: { code: -32601, message: 'unsupported' } }) + '\n' }
+      if (m.id !== undefined && m.error) return { ...fail(m.error.message), done: true }
+      if (m.id === 1) return { write: JSON.stringify({ method: 'initialized' }) + '\n' + request('thread/start', { model: modelName, sandbox: 'read-only', approvalPolicy: 'never', ephemeral: true, cwd }) }
+      if (m.id === 2)
+        return { write: request('turn/start', { threadId: m.result.thread.id, input: [{ type: 'text', text: prompt, text_elements: [] }], effort, outputSchema: schema }) }
+      if (m.method === 'item/agentMessage/delta') return { event: { t: 'delta', text: m.params.delta } }
+      if (m.method === 'thread/tokenUsage/updated') last = m.params.tokenUsage.last
+      if (m.method === 'error' && !m.params.willRetry) return { ...fail(m.params.error.message), done: true }
+      if (m.method !== 'turn/completed') return {}
+      const { status, error } = m.params.turn
+      if (status !== 'completed') return { ...fail(error?.message ?? `codex turn ${status}`), done: true }
+      return {
+        done: true,
+        event: { t: 'usage', inputTokens: last?.inputTokens ?? 0, outputTokens: last?.outputTokens ?? 0, cachedInputTokens: last?.cachedInputTokens, cacheWriteTokens: last?.cacheWriteInputTokens },
+      }
+    },
+  }
+}
+
+const mapEvent: Record<'claude-code', (e: CliEvent) => RunEvent | undefined> = {
   'claude-code': (e) => {
     if (e.type === 'stream_event' && !e.parent_tool_use_id && e.event?.type === 'content_block_delta' && e.event.delta?.type === 'text_delta')
       return { t: 'delta', text: e.event.delta.text ?? '' }
@@ -149,21 +169,6 @@ const mapEvent: Record<Exclude<CliProvider, 'opencode'>, (e: CliEvent) => RunEve
       outputTokens: u.output_tokens ?? 0,
       cachedInputTokens: u.cache_read_input_tokens,
       cacheWriteTokens: u.cache_creation_input_tokens,
-    }
-  },
-  codex: (e) => {
-    // shortcut: codex exec --json emits the reply only as a completed item, so the whole text arrives as one delta.
-    if (e.type === 'item.completed' && e.item?.type === 'agent_message') return { t: 'delta', text: e.item.text ?? '' }
-    if (e.type === 'turn.failed') return { t: 'error', message: unwrap(e.error?.message ?? 'codex failed') }
-    if (e.type === 'error') return { t: 'error', message: unwrap(e.message ?? 'codex failed') }
-    if (e.type !== 'turn.completed') return
-    const u = e.usage ?? {}
-    return {
-      t: 'usage',
-      inputTokens: u.input_tokens ?? 0,
-      outputTokens: u.output_tokens ?? 0,
-      cachedInputTokens: u.cached_input_tokens,
-      cacheWriteTokens: u.cache_write_input_tokens,
     }
   },
 }
@@ -185,7 +190,7 @@ function opencodeEvents() {
   }
 }
 
-export const eventMapper = (provider: CliProvider) => (provider === 'opencode' ? opencodeEvents() : mapEvent[provider])
+export const eventMapper = (provider: Exclude<CliProvider, 'codex'>) => (provider === 'opencode' ? opencodeEvents() : mapEvent[provider])
 
 const parse = (line: string): CliEvent | undefined => {
   try {
@@ -225,7 +230,7 @@ function descendants(root: number): number[] {
 
 // Detached so the whole process group (the CLI and anything it spawned) can be killed, even after the leader exits.
 function spawnCli(bin: string, args: string[], dir: string) {
-  const env = { ...cliEnv(), ...(bin === 'opencode' && opencodeEnv(dir)) }
+  const env = { ...cliEnv(), ...(bin === 'opencode' && opencodeEnv(dir)), ...(bin === 'codex' && args[0] === 'app-server' && { CODEX_HOME: join(dir, 'codex-home') }) }
   const child = spawn(bin, args, { cwd: join(dir, 'cwd'), env, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
   child.stdin.on('error', () => {})
   const kill = () => {
@@ -248,6 +253,12 @@ function spawnCli(bin: string, args: string[], dir: string) {
     await exit
   }
   return { child, kill, dispose, exit, spawnError: () => spawnError }
+}
+
+// Private CODEX_HOME drops the user's config, AGENTS.md and MCP servers; the login is only symlinked, never read.
+async function prepareCodexHome(home: string) {
+  await mkdir(home)
+  await symlink(join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'auth.json'), join(home, 'auth.json'))
 }
 
 const tempDir = async () => {
@@ -283,37 +294,51 @@ export function runCli(provider: CliProvider, job: Job, signal: AbortSignal, tim
           return
         }
         const started = performance.now()
-        if (provider === 'codex') await writeFile(join(dir, 'system.md'), job.system)
+        if (provider === 'codex') {
+          await writeFile(join(dir, 'system.md'), job.system)
+          await prepareCodexHome(join(dir, 'codex-home'))
+        }
         if (provider === 'opencode') {
           await mkdir(join(dir, 'config', 'opencode'), { recursive: true })
           await writeFile(join(dir, 'config', 'opencode', 'opencode.json'), opencodeConfigText(job.system))
         }
-        if (job.schema) await writeFile(join(dir, 'schema.json'), JSON.stringify(job.schema))
         const p = (proc = spawnCli(bins[provider], cliArgs(provider, job, dir), dir))
         let timedOut = false
         timer = setTimeout(() => ((timedOut = true), p.kill()), timeoutMs)
         signal.addEventListener('abort', p.kill, { once: true })
         if (signal.aborted) p.kill()
-        p.child.stdin.end(job.prompt)
+        const session = provider === 'codex' ? codexSession(job, join(dir, 'cwd')) : undefined
+        if (session) p.child.stdin.write(session.start)
+        else p.child.stdin.end(job.prompt)
         let stderr = ''
         p.child.stderr.on('data', (d) => (stderr = (stderr + d).slice(-1000)))
 
         let ttftMs: number | null = null
-        const map = eventMapper(provider)
+        const map = provider === 'codex' ? undefined : eventMapper(provider)
+        let finished = false
         for await (const line of createInterface({ input: p.child.stdout })) {
           const parsed = parse(line)
-          const event = parsed && map(parsed)
-          if (!event || (event.t === 'error' && failed)) continue
-          if (event.t === 'delta') ttftMs ??= performance.now() - started
-          if (event.t === 'error') failed = true
-          send(event)
+          let event: RunEvent | undefined
+          if (session && parsed) {
+            const step = session.handle(parsed)
+            if (step.write) p.child.stdin.write(step.write)
+            event = step.event
+            finished = !!step.done
+          } else event = parsed && map?.(parsed)
+          if (event && !(event.t === 'error' && failed)) {
+            if (event.t === 'delta') ttftMs ??= performance.now() - started
+            if (event.t === 'error') failed = true
+            send(event)
+          }
+          if (finished) break
         }
+        if (finished) p.kill()
         const code = await p.exit
         if (failed) return
         const spawnError = p.spawnError()
         if (timedOut) send({ t: 'error', message: `${bins[provider]} timed out after ${timeoutMs / 1000}s` })
         else if (spawnError) send({ t: 'error', message: spawnError.message })
-        else if (code !== 0) send({ t: 'error', message: stderr.trim() || `${bins[provider]} exited with code ${code}` })
+        else if (code !== 0 && !finished) send({ t: 'error', message: stderr.trim() || `${bins[provider]} exited with code ${code}` })
         else send({ t: 'done', ttftMs, totalMs: performance.now() - started })
       } catch (error) {
         if (!failed) send({ t: 'error', message: error instanceof Error ? error.message : String(error) })
