@@ -1,12 +1,21 @@
 import { useBoundProp, type BaseComponentProps } from '@json-render/react'
 import { Children, useId, useState, type ReactNode } from 'react'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, LabelList, Line, LineChart, Pie, PieChart, XAxis, YAxis } from 'recharts'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -16,8 +25,8 @@ import type { ComponentName, PropsOf } from './schema'
 type Impl<K extends ComponentName> = (ctx: BaseComponentProps<PropsOf<K>>) => ReactNode
 
 // Bound props write to json-render state; unbound ones still need to be editable.
-function useValue(propValue: string | undefined, bindingPath: string | undefined) {
-  const [bound, setBound] = useBoundProp(propValue, bindingPath)
+function useValue<T extends string | boolean>(propValue: T | undefined, bindingPath: string | undefined) {
+  const [bound, setBound] = useBoundProp<T>(propValue, bindingPath)
   const [local, setLocal] = useState(propValue)
   const [lastProp, setLastProp] = useState(propValue)
   if (propValue !== lastProp) {
@@ -242,6 +251,110 @@ const TabsImpl: Impl<'Tabs'> = ({ props, bindings, children }) => {
   )
 }
 
+const CheckboxImpl: Impl<'Checkbox'> = ({ props, bindings }) => {
+  const id = useId()
+  const [checked, setChecked] = useValue(props.checked, bindings?.checked)
+  return (
+    <div className="flex items-center gap-2">
+      <Checkbox id={id} checked={checked ?? false} onCheckedChange={setChecked} />
+      <Label htmlFor={id}>{props.label}</Label>
+    </div>
+  )
+}
+
+const SwitchImpl: Impl<'Switch'> = ({ props, bindings }) => {
+  const id = useId()
+  const [checked, setChecked] = useValue(props.checked, bindings?.checked)
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={id}>{props.label}</Label>
+        {props.description && <span className="text-sm text-muted-foreground">{props.description}</span>}
+      </div>
+      <Switch id={id} checked={checked ?? false} onCheckedChange={setChecked} />
+    </div>
+  )
+}
+
+const TextareaImpl: Impl<'Textarea'> = ({ props, bindings }) => {
+  const id = useId()
+  const [value, setValue] = useValue(props.value, bindings?.value)
+  return (
+    <div className="flex flex-col gap-2">
+      {props.label && <Label htmlFor={id}>{props.label}</Label>}
+      <Textarea id={id} placeholder={props.placeholder} value={value ?? ''} onChange={(e) => setValue(e.target.value)} />
+    </div>
+  )
+}
+
+const RadioGroupImpl: Impl<'RadioGroup'> = ({ props, bindings }) => {
+  const id = useId()
+  const [value, setValue] = useValue(props.value, bindings?.value)
+  return (
+    <div className="flex flex-col gap-2">
+      {props.label && <Label>{props.label}</Label>}
+      <RadioGroup value={value ?? ''} onValueChange={(v) => setValue(String(v))}>
+        {props.options.map((o, i) => (
+          <div key={o} className="flex items-center gap-2">
+            <RadioGroupItem id={`${id}-${i}`} value={o} />
+            <Label htmlFor={`${id}-${i}`}>{o}</Label>
+          </div>
+        ))}
+      </RadioGroup>
+    </div>
+  )
+}
+
+const ProgressImpl: Impl<'Progress'> = ({ props }) => (
+  <div className="flex flex-col gap-2">
+    {props.label && (
+      <div className="flex justify-between text-sm">
+        <span>{props.label}</span>
+        <span className="text-muted-foreground">{props.value}%</span>
+      </div>
+    )}
+    <Progress value={props.value} />
+  </div>
+)
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join('')
+
+const AvatarImpl: Impl<'Avatar'> = ({ props }) => (
+  <Avatar size={props.size}>
+    {props.src && <AvatarImage src={props.src} alt={props.name} />}
+    <AvatarFallback>{initials(props.name)}</AvatarFallback>
+  </Avatar>
+)
+
+const AlertImpl: Impl<'Alert'> = ({ props }) => (
+  <Alert variant={props.variant}>
+    <AlertTitle>{props.title}</AlertTitle>
+    {props.description && <AlertDescription>{props.description}</AlertDescription>}
+  </Alert>
+)
+
+const SeparatorImpl: Impl<'Separator'> = () => <Separator />
+
+const AccordionImpl: Impl<'Accordion'> = ({ props, children }) => {
+  const panels = Children.toArray(children)
+  return (
+    <Accordion>
+      {props.items.map((item, i) => (
+        <AccordionItem key={item} value={item}>
+          <AccordionTrigger>{item}</AccordionTrigger>
+          <AccordionContent>{panels[i]}</AccordionContent>
+        </AccordionItem>
+      ))}
+    </Accordion>
+  )
+}
+
 export const components: { [K in ComponentName]: Impl<K> } = {
   Stack,
   Grid,
@@ -258,4 +371,13 @@ export const components: { [K in ComponentName]: Impl<K> } = {
   Badge: BadgeImpl,
   Chart,
   Tabs: TabsImpl,
+  Checkbox: CheckboxImpl,
+  Switch: SwitchImpl,
+  Textarea: TextareaImpl,
+  RadioGroup: RadioGroupImpl,
+  Progress: ProgressImpl,
+  Avatar: AvatarImpl,
+  Alert: AlertImpl,
+  Separator: SeparatorImpl,
+  Accordion: AccordionImpl,
 }

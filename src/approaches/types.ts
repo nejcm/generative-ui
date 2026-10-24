@@ -33,6 +33,7 @@ export const designBrief = `
 
 DESIGN BRIEF (applies to every UI you produce):
 - Build a complete, realistic screen, not a skeleton: a clear title and intro, grouped sections, and enough detail that it could ship.
+- Cover exactly what the request names, with no extra pages or marketing sections.
 - Use the supplied DATA in full: every field is there to be shown. Derive useful extras from it (shares, totals, deltas, rankings) instead of inventing unrelated numbers.
 - Where it fits, add status badges, trend/change figures, secondary actions, helper text, and sensible empty or edge-case copy.
 - Establish hierarchy with headings, size and weight; group related items; keep spacing and alignment consistent.

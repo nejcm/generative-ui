@@ -24,3 +24,8 @@ test('state-bound props render from the initial state and invalid resolved props
   expect(renderToString(<SpecView spec={spec({ rows: [['Ada']] })} />)).toContain('Ada')
   expect(renderToString(<SpecView spec={spec({ rows: 'nope' })} />)).toContain('invalid Table props')
 })
+
+test.each(Object.keys(componentProps) as ComponentName[])('%s renders its sample props', (name) => {
+  const spec = { root: 'x', elements: { x: { type: name, props: catalog.data.components[name].example, children: [] } } }
+  expect(() => renderToString(<SpecView spec={spec} />)).not.toThrow()
+})

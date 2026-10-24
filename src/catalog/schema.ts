@@ -46,6 +46,15 @@ export const componentProps = {
     title: z.string().optional(),
   }),
   Tabs: z.object({ tabs: z.array(z.string()), value: z.string().optional() }),
+  Checkbox: z.object({ label: z.string(), checked: z.boolean().optional() }),
+  Switch: z.object({ label: z.string(), description: z.string().optional(), checked: z.boolean().optional() }),
+  Textarea: z.object({ label: z.string().optional(), placeholder: z.string().optional(), value: z.string().optional() }),
+  RadioGroup: z.object({ label: z.string().optional(), options: z.array(z.string()), value: z.string().optional() }),
+  Progress: z.object({ label: z.string().optional(), value: z.number().min(0).max(100) }),
+  Avatar: z.object({ name: z.string(), src: z.httpUrl().optional(), size: z.enum(['sm', 'default', 'lg']).optional() }),
+  Alert: z.object({ title: z.string(), description: z.string().optional(), variant: z.enum(['default', 'destructive']).optional() }),
+  Separator: z.object({}),
+  Accordion: z.object({ items: z.array(z.string()) }),
 }
 
 export type ComponentName = keyof typeof componentProps
