@@ -17,7 +17,12 @@ const getJson = async <T,>(url: string): Promise<T> => {
 
 export async function loadBatch(batchId: string) {
   const batch = await getJson<RunSummary[]>(`/api/runs?batchId=${encodeURIComponent(batchId)}`)
-  return Promise.all(batch.slice(0, 4).reverse().map((r) => getJson<Run>(`/api/runs/${r.id}`)))
+  return Promise.all(
+    batch
+      .slice(0, 4)
+      .reverse()
+      .map((r) => getJson<Run>(`/api/runs/${r.id}`)),
+  )
 }
 
 const presetLabel = (id?: string) => presets.find((p) => p.id === id)?.label ?? 'Free text'
@@ -39,7 +44,8 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
       .catch((e: Error) => setError(e.message))
   }, [presetId])
 
-  async function show(id: string) {
+  async function toggle(id: string) {
+    if (selected?.run.id === id) return setSelected(undefined)
     const run = await getJson<Run>(`/api/runs/${id}`)
     const approach = approachById(run.approach)!
     setSelected({
@@ -49,7 +55,11 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
     })
   }
 
-  const costOf = (r: RunSummary) => runCost(models.find((m) => m.id === r.modelId), r.metrics.costUsd)
+  const costOf = (r: RunSummary) =>
+    runCost(
+      models.find((m) => m.id === r.modelId),
+      r.metrics.costUsd,
+    )
   const act = (fn: () => Promise<void>) => () => fn().catch((e: Error) => setError(e.message))
   const openBatch = (batchId: string) => act(async () => onOpenBatch(await loadBatch(batchId)))
   const batches = [...new Set(runs?.map((r) => r.batchId))].map((id) => runs!.filter((r) => r.batchId === id).reverse())
@@ -61,52 +71,57 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
       <div className="page-h">
         <div>
           <h1>History</h1>
-          <p>{runs ? `${runs.length} saved runs in ${batches.length} batches.` : 'Loading saved runs…'}</p>
+          <p>{runs ? `${runs.length} saved runs in ${batches.length} batches. Select a run to see its output, metrics and replay.` : 'Loading saved runs…'}</p>
         </div>
         <div className="acts w-64">
-          <Choice
-            label="Preset filter"
-            value={presetId}
-            options={[{ value: '', label: 'All presets' }, ...presets.map((p) => ({ value: p.id, label: p.label }))]}
-            onChange={setPresetId}
-          />
+          <Choice label="Preset filter" value={presetId} options={[{ value: '', label: 'All presets' }, ...presets.map((p) => ({ value: p.id, label: p.label }))]} onChange={setPresetId} />
         </div>
       </div>
       {error && <div className="notice">{error}</div>}
-      <div className="hist">
-        <section className="panel overflow-x-auto" aria-label="Runs">
-          <table className="htable">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Approach</th>
-                <th>Model</th>
-                <th className="num">TTFR</th>
-                <th className="num">Cost</th>
-                <th className="num">Errors</th>
-                <th>Rating</th>
-              </tr>
-            </thead>
-            <tbody>
-              {batches.map((group) => (
-                <Fragment key={group[0].batchId}>
-                  <tr className="batch">
-                    <td colSpan={7}>
-                      <div className="flex items-center gap-3">
-                        <span>
-                          {presetLabel(group[0].presetId)} · {group.length} {group.length === 1 ? 'run' : 'runs'}
-                        </span>
-                        <span className="muted" style={{ fontWeight: 400 }}>
-                          {new Date(group[0].createdAt).toLocaleString()} · {batchUsd(group.map(costOf))}
-                        </span>
-                        <button type="button" className="btn btn-sm ml-auto" onClick={openBatch(group[0].batchId)}>
-                          Open in Lab
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  {group.map((r, i) => (
-                    <tr key={r.id} className={`run${sel?.id === r.id ? ' on' : ''}`} onClick={act(() => show(r.id))} aria-selected={sel?.id === r.id}>
+      <section className="panel hpanel" aria-label="Runs">
+        <table className="htable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Approach</th>
+              <th>Model</th>
+              <th className="num">TTFR</th>
+              <th className="num">Cost</th>
+              <th className="num">Errors</th>
+              <th>Rating</th>
+            </tr>
+          </thead>
+          <tbody>
+            {batches.map((group) => (
+              <Fragment key={group[0].batchId}>
+                <tr className="batch">
+                  <td colSpan={7}>
+                    <div className="flex items-center gap-3">
+                      <span>
+                        {presetLabel(group[0].presetId)} · {group.length} {group.length === 1 ? 'run' : 'runs'}
+                      </span>
+                      <span className="muted" style={{ fontWeight: 400 }}>
+                        {new Date(group[0].createdAt).toLocaleString()} · {batchUsd(group.map(costOf))}
+                      </span>
+                      <button type="button" className="btn btn-sm ml-auto" onClick={openBatch(group[0].batchId)}>
+                        Open in Lab
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {group.map((r, i) => (
+                  <Fragment key={r.id}>
+                    <tr
+                      className={`run${sel?.id === r.id ? ' on' : ''}`}
+                      tabIndex={0}
+                      aria-expanded={sel?.id === r.id}
+                      onClick={act(() => toggle(r.id))}
+                      onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+                        e.preventDefault()
+                        act(() => toggle(r.id))()
+                      }}
+                    >
                       <td className="muted">{i + 1}</td>
                       <td>
                         <span className="inline-flex items-center gap-2">
@@ -122,67 +137,71 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
                         <Pips rating={r.rating} />
                       </td>
                     </tr>
-                  ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-          {runs?.length === 0 && <p className="ph">No runs yet. Runs are saved here when they finish in the Lab.</p>}
-        </section>
-        <aside className="panel aside" aria-label="Run details">
-          {sel ? (
-            <>
-              <div className="flex items-center gap-2">
-                <ApBadge approach={selected.approach} large />
-                <div className="min-w-0">
-                  <b className="block truncate">{modelLabel(sel.modelId)}</b>
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    {presetLabel(sel.presetId)} · {new Date(sel.createdAt).toLocaleString()}
-                  </span>
-                </div>
-              </div>
-              <p className="caveat">{sel.prompt}</p>
-              <div className="mgrid">
-                {(
-                  [
-                    ['TTFR', secs(sel.metrics.ttfrMs)],
-                    ['First token', secs(sel.metrics.ttftMs)],
-                    ['Total', secs(sel.metrics.totalMs)],
-                    ['Tokens out', sel.metrics.outputTokens?.toLocaleString('en-US') ?? '–'],
-                    ['Cost', usd(costOf(sel))],
-                    ['Valid', sel.metrics.valid ? 'valid' : 'invalid'],
-                  ] as const
-                ).map(([label, value]) => (
-                  <div key={label}>
-                    <span className="lbl block">{label}</span>
-                    <span className="m-v">{value}</span>
-                  </div>
+                    {sel?.id === r.id && selected && (
+                      <tr className="det">
+                        <td colSpan={7}>
+                          <div className="hdet">
+                            <div className="hinfo">
+                              <div className="flex items-center gap-2">
+                                <ApBadge approach={selected.approach} large />
+                                <div className="min-w-0">
+                                  <b className="block truncate">{modelLabel(sel.modelId)}</b>
+                                  <span className="muted" style={{ fontSize: 12 }}>
+                                    {presetLabel(sel.presetId)} · {new Date(sel.createdAt).toLocaleString()}
+                                  </span>
+                                </div>
+                              </div>
+                              <p className="caveat">{sel.prompt}</p>
+                              <div className="mgrid">
+                                {(
+                                  [
+                                    ['TTFR', secs(sel.metrics.ttfrMs)],
+                                    ['First token', secs(sel.metrics.ttftMs)],
+                                    ['Total', secs(sel.metrics.totalMs)],
+                                    ['Tokens out', sel.metrics.outputTokens?.toLocaleString('en-US') ?? '–'],
+                                    ['Cost', usd(costOf(sel))],
+                                    ['Valid', sel.metrics.valid ? 'valid' : 'invalid'],
+                                  ] as const
+                                ).map(([label, value]) => (
+                                  <div key={label}>
+                                    <span className="lbl block">{label}</span>
+                                    <span className="m-v">{value}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              {sel.metrics.errors.length > 0 && (
+                                <Collapsible key={sel.id} title={<span className="v-bad">{sel.metrics.errors.length === 1 ? '1 error' : `${sel.metrics.errors.length} errors`}</span>}>
+                                  <Errors errors={sel.metrics.errors} />
+                                </Collapsible>
+                              )}
+                              <div className="flex items-center gap-2">
+                                <Pips rating={sel.rating} />
+                                <span className="muted">{sel.rating ? words[sel.rating] : 'Not rated'}</span>
+                              </div>
+                              {sel.notes && <p className="caveat">{sel.notes}</p>}
+                              <button type="button" className="btn self-start" onClick={openBatch(sel.batchId)}>
+                                Open batch in Lab
+                              </button>
+                            </div>
+                            <div className="min-w-0">
+                              {sel.deltas ? (
+                                <Replay key={sel.id} run={sel} status={selStatus} />
+                              ) : (
+                                <Result key={sel.id} approach={selected.approach} state={selected.state} raw={sel.rawOutput} strip={stripOf(selStatus, sel.metrics.errors)} />
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
-              </div>
-              {sel.deltas ? (
-                <Replay key={sel.id} run={sel} status={selStatus} />
-              ) : (
-                <Result key={sel.id} approach={selected.approach} state={selected.state} raw={sel.rawOutput} compact strip={stripOf(selStatus, sel.metrics.errors)} />
-              )}
-              {sel.metrics.errors.length > 0 && (
-                <Collapsible key={sel.id} title={<span className="v-bad">{sel.metrics.errors.length === 1 ? '1 error' : `${sel.metrics.errors.length} errors`}</span>}>
-                  <Errors errors={sel.metrics.errors} />
-                </Collapsible>
-              )}
-              <div className="flex items-center gap-2">
-                <Pips rating={sel.rating} />
-                <span className="muted">{sel.rating ? words[sel.rating] : 'Not rated'}</span>
-              </div>
-              {sel.notes && <p className="caveat">{sel.notes}</p>}
-              <button type="button" className="btn" onClick={openBatch(sel.batchId)}>
-                Open batch in Lab
-              </button>
-            </>
-          ) : (
-            <p className="muted">Select a run to see its output, metrics and replay.</p>
-          )}
-        </aside>
-      </div>
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+        {runs?.length === 0 && <p className="ph">No runs yet. Runs are saved here when they finish in the Lab.</p>}
+      </section>
     </div>
   )
 }

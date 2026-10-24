@@ -241,6 +241,17 @@ export default function App() {
             <span>/</span>
             <strong>{pageTitle[page]}</strong>
           </nav>
+          <div className="mnav">
+            <Seg
+              label="Pages"
+              value={page}
+              options={[
+                { value: 'lab', label: pageTitle.lab },
+                { value: 'history', label: pageTitle.history },
+              ]}
+              onChange={setPage}
+            />
+          </div>
         </header>
         <main className="sheet">
           {error && (
@@ -458,7 +469,9 @@ function Scorecard(props: {
       </div>
       <section className="score" aria-label="Scorecard">
         <div className="score-g score-h">
-          <span className="sr-only">Show</span>
+          <span>
+            <span className="sr-only">Show</span>
+          </span>
           <span>#</span>
           <span>Run</span>
           {columns.map((c) => (
