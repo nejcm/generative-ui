@@ -1,13 +1,13 @@
 export type Provider = 'anthropic' | 'openai'
 
-export type Effort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+export type Effort = 'none' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export type Model = {
   id: string
   provider: Provider
   modelName: string
   label: string
-  price: { inPerMTok: number; outPerMTok: number; cachedInPerMTok?: number; source: string; checkedAt: string }
+  price: { inPerMTok: number; outPerMTok: number; cachedInPerMTok?: number; cacheWritePerMTok?: number; source: string; checkedAt: string }
   supports: { strictJson: boolean; effort?: Effort[]; temperature: boolean }
 }
 
@@ -44,7 +44,7 @@ export const models: Model[] = [
     provider: 'openai',
     modelName: 'gpt-6-luna',
     label: 'GPT-6 Luna',
-    price: { inPerMTok: 0.1, outPerMTok: 0.5, cachedInPerMTok: 0.01, source: openaiPricing, checkedAt: '2026-10-24' },
+    price: { inPerMTok: 0.1, outPerMTok: 0.5, cachedInPerMTok: 0.01, cacheWritePerMTok: 0.125, source: openaiPricing, checkedAt: '2026-10-24' },
     supports: { strictJson: true, effort: ['none', 'low', 'medium', 'high', 'xhigh', 'max'], temperature: false },
   },
   {
@@ -52,7 +52,7 @@ export const models: Model[] = [
     provider: 'openai',
     modelName: 'gpt-6.1-sol',
     label: 'GPT-6.1 Sol',
-    price: { inPerMTok: 2, outPerMTok: 10, cachedInPerMTok: 0.1, source: openaiPricing, checkedAt: '2026-10-24' },
+    price: { inPerMTok: 2, outPerMTok: 10, cachedInPerMTok: 0.1, cacheWritePerMTok: 2.5, source: openaiPricing, checkedAt: '2026-10-24' },
     supports: { strictJson: true, effort: ['low', 'medium', 'high', 'xhigh', 'max'], temperature: false },
   },
 ]

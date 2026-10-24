@@ -18,6 +18,12 @@ test('falls back to the input rate when no cached price is listed', () => {
   expect(cost(uncached, { inputTokens: 1_000_000, outputTokens: 0, cachedInputTokens: 500_000 })).toBeCloseTo(0.1, 9)
 })
 
+test('bills cache writes at the write rate, falling back to the input rate', () => {
+  const luna = models.find((m) => m.id === 'gpt-6-luna')!
+  expect(cost(luna, { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 1_000_000 })).toBeCloseTo(0.125, 9)
+  expect(cost(haiku, { inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 1_000_000 })).toBeCloseTo(0.1, 9)
+})
+
 test('unknown run cost shows a dash; batch sums mark unknown parts with ≥', () => {
   expect(usd(null)).toBe('–')
   expect(usd(0.0012)).toBe('$0.0012')

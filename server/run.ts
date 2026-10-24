@@ -13,7 +13,7 @@ const RunRequest = z.object({
   modelId: z.string(),
   settings: z.object({
     temperature: z.number().min(0).max(2).optional(),
-    effort: z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
+    effort: z.enum(['none', 'low', 'medium', 'high', 'xhigh', 'max']).optional(),
   }),
   system: z.string(),
   prompt: z.string().min(1),
@@ -66,6 +66,7 @@ export async function run(c: Context) {
               inputTokens: usage.inputTokens ?? 0,
               outputTokens: usage.outputTokens ?? 0,
               cachedInputTokens: usage.inputTokenDetails.cacheReadTokens,
+              cacheWriteTokens: usage.inputTokenDetails.cacheWriteTokens,
             })
           }
         }
