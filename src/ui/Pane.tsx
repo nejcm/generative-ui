@@ -3,12 +3,14 @@ import { approachById, approaches, parseAll, type Approach, type ParseState } fr
 import { catalog } from '@/catalog/catalog'
 import { ChevronLeft, ChevronRight, Square } from 'lucide-react'
 import { cost, runCost, type Usage } from '@/lib/cost'
+import { coverage } from '@/lib/coverage'
+import { fidelity } from '@/lib/fidelity'
 import { sha256 } from '@/lib/hash'
 import { readNdjson, type RunEvent } from '@/lib/ndjson'
 import { whenCurrent } from '@/lib/playback'
 import { strictOutputOf, type Run } from '@/lib/run'
 import { models as registry, type Model } from '@/models'
-import { fixtures } from '@/prompts'
+import { fixtures, presets } from '@/prompts'
 import { Choice } from './Choice'
 import { MetricsStrip } from './MetricsStrip'
 import { Replay } from './Replay'
@@ -183,6 +185,11 @@ export function Pane(props: Props) {
         totalMs: done?.totalMs ?? performance.now() - started,
         inputTokens: usage?.inputTokens ?? null,
         outputTokens: usage?.outputTokens ?? null,
+        cachedInputTokens: usage?.cachedInputTokens,
+        cacheWriteTokens: usage?.cacheWriteTokens,
+        outputChars: rawOutput.length,
+        coverage: fixture === undefined ? undefined : coverage(fixture, rawOutput),
+        fidelity: fidelity(state, presets.find((p) => p.id === req.presetId)?.requires),
         costUsd: usage ? cost(model, usage) : null,
         valid: !aborted && errors.length === 0,
         errorCount: errors.length,

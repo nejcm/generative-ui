@@ -44,7 +44,9 @@ export async function run(c: Context) {
   const started = performance.now()
   const result = streamText({
     model: providers[model.provider](model.modelName),
-    system,
+    system: model.provider === 'anthropic'
+      ? { role: 'system', content: system, providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } } }
+      : system,
     prompt,
     temperature: model.supports.temperature ? settings.temperature : undefined,
     reasoning: effort as Parameters<typeof streamText>[0]['reasoning'], // validated against the model's list above

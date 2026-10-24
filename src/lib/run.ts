@@ -28,6 +28,11 @@ export const RunRecord = z.strictObject({
     // null: no usage reported (aborted stream), not zero spend.
     inputTokens: z.number().nullable(),
     outputTokens: z.number().nullable(),
+    cachedInputTokens: z.number().int().min(0).optional(),
+    cacheWriteTokens: z.number().int().min(0).optional(),
+    outputChars: z.number().int().min(0).optional(),
+    coverage: z.number().min(0).max(1).optional(),
+    fidelity: z.number().min(0).max(1).optional(),
     costUsd: z.number().nullable(),
     valid: z.boolean(),
     errorCount: z.number().int(),

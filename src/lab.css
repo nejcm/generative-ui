@@ -261,6 +261,8 @@ body{margin:0;background:var(--frame)}
 .kpi .kv small{margin-left:3px;font-size:14px;font-weight:400;color:var(--fg-3);letter-spacing:0}
 .sgrid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:14px;align-items:start}
 .stats .htable{table-layout:fixed}
+.stats.measurement{grid-column:1/-1}
+.stats.measurement .htable{min-width:850px}
 .stats .htable th{white-space:nowrap}
 .stats .htable th:first-child,.stats .htable td:first-child{width:30%;overflow:hidden;text-overflow:ellipsis}
 .stats.narrow .htable th:first-child,.stats.narrow .htable td:first-child{width:17%}

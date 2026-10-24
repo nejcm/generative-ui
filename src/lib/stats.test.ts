@@ -30,4 +30,15 @@ describe('stats', () => {
     const top = topErrors([run({ errors: e }), run({ errors: e }), run({ errors: [{ at: 'b', message: 'other' }] })])
     expect(top.map((t) => t.count)).toEqual([2, 1])
   })
+
+  it('measurement medians omit old and aborted runs while preserving zero scores', () => {
+    const [g] = groupBy([
+      run(),
+      run({ cachedInputTokens: 100, cacheWriteTokens: 0, outputChars: 80, coverage: 0, fidelity: 1 }),
+      run({ cachedInputTokens: 300, cacheWriteTokens: 200, outputChars: 120, coverage: 1, fidelity: 0.5 }),
+      run({ aborted: true, outputChars: 999, coverage: 0 }),
+    ], () => 'all')
+    expect(g).toMatchObject({ cachedInputTokens: 200, cacheWriteTokens: 100, outputChars: 100, coverage: 0.5, fidelity: 0.75 })
+    expect(groupBy([run()], () => 'old')[0]).toMatchObject({ cachedInputTokens: null, cacheWriteTokens: null, outputChars: null, coverage: null, fidelity: null })
+  })
 })

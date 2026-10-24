@@ -9,6 +9,7 @@ import { modelLabel } from './History'
 
 const approachName = (key: string) => approachById(key as Approach['id'])?.label.split(' · ')[1] ?? key
 const tokens = (n: number | null) => (n == null ? '–' : Math.round(n).toLocaleString('en-US'))
+const share = (n: number | null) => (n == null ? '–' : `${Math.round(n * 100)}%`)
 const MIN_RUNS = 5
 
 function Bar({ value, max, hue }: { value: number | null; max: number; hue?: string }) {
@@ -102,6 +103,32 @@ function Tables({ runs }: { runs: RunSummary[] }) {
         <Kpi label="Median tokens out" value={tokens(all.outputTokens)} />
       </section>
       <div className="sgrid">
+        <Panel className="measurement" title="Measurement by approach" note="Medians of completed runs; missing metrics excluded; coverage counts repeated fixture leaves">
+          <table className="htable">
+            <thead>
+              <tr>
+                <th>Approach</th>
+                <th className="num">Cached in</th>
+                <th className="num">Cache writes</th>
+                <th className="num">Output chars</th>
+                <th className="num">Coverage</th>
+                <th className="num">Fidelity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groupBy(runs, (r) => r.approach).map((g) => (
+                <tr key={g.key}>
+                  <td>{approachName(g.key)}</td>
+                  <td className="num">{tokens(g.cachedInputTokens)}</td>
+                  <td className="num">{tokens(g.cacheWriteTokens)}</td>
+                  <td className="num">{tokens(g.outputChars)}</td>
+                  <td className="num">{share(g.coverage)}</td>
+                  <td className="num">{share(g.fidelity)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
         <GroupTable
           title="Approach"
           groups={groupBy(runs, (r) => r.approach)}
