@@ -50,7 +50,7 @@ export const html: Approach = {
   id: 'html',
   label: 'C · raw HTML (sandboxed iframe)',
   systemPrompt: ({ fixture }) =>
-    'Return one self-contained HTML document. Inline CSS/JS only. No external requests. No markdown, no code fences, no prose. Responsive layout, system fonts, light and dark support. Take inspiration from shadcn/ui: neutral palette with one accent, bordered cards, 7px radius, muted secondary text, subtle shadows. Chart colours: oklch(0.62 0.17 255), oklch(0.7 0.13 185), oklch(0.78 0.15 80), oklch(0.6 0.18 300), oklch(0.65 0.2 15).' +
+    'Return one self-contained HTML document. Inline CSS/JS only. No external requests. No markdown, no code fences, no prose. Responsive layout, system fonts, light and dark support. Take inspiration from shadcn/ui: neutral palette with one accent, bordered cards, 7px radius, muted secondary text, subtle shadows. Chart colours: oklch(0.62 0.17 255), oklch(0.7 0.13 185), oklch(0.78 0.15 80), oklch(0.6 0.18 300), oklch(0.65 0.2 15). The style notes and the design brief below are defaults: whenever the request asks for something different (look, colours, fonts, layout, extra sections), follow the request.' +
     designBrief +
     fixtureBlock(fixture),
   output: { kind: 'text' },
