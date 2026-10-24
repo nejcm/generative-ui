@@ -1,56 +1,46 @@
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import type { ReactNode } from 'react'
+import { Check, Flag, X } from 'lucide-react'
 import { usd, type Cost } from '@/lib/cost'
 import type { Run } from '@/lib/run'
+import { secs } from './bits'
 
-const secs = (ms: number | null | undefined) => (ms == null ? '–' : `${(ms / 1000).toFixed(2)}s`)
-
-type Props = {
-  metrics: Partial<Run['metrics']>
-  cost: Cost
-  saved?: Pick<Run, 'id' | 'rating' | 'notes'>
-  onRate: (rating: number) => void
-  onNotes: (notes: string) => void
-}
-
-export function MetricsStrip({ metrics: m, cost, saved, onRate, onNotes }: Props) {
+export function MetricsStrip({ metrics: m, cost, elapsedMs }: { metrics: Partial<Run['metrics']>; cost: Cost; elapsedMs?: number }) {
+  const cell = (label: string, value: ReactNode, wait = value === '–') => (
+    <div className={`m-cell${wait ? ' m-wait' : ''}`}>
+      <span className="lbl">{label}</span>
+      <span className="m-v">{value}</span>
+    </div>
+  )
+  const hit = m.ttfrMs != null
   return (
-    <div className="flex flex-col gap-2 text-xs">
-      <dl className="grid grid-cols-4 gap-x-3 gap-y-1 tabular-nums">
-        {[
-          ['TTFT', secs(m.ttftMs)],
-          ['TTFR', secs(m.ttfrMs)],
-          ['Total', secs(m.totalMs)],
-          ['Cost', usd(cost)],
-          ['In', m.inputTokens ?? '–'],
-          ['Out', m.outputTokens ?? '–'],
-          ['Valid', m.valid == null ? '–' : m.valid ? '✓' : '✗'],
-          ['Errors', m.errorCount ?? '–'],
-        ].map(([label, value]) => (
-          <div key={label} className="flex justify-between gap-1">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-      {m.aborted && <p className="text-muted-foreground">Aborted</p>}
-      <div className="flex items-center gap-1">
-        <span className="text-muted-foreground">Rating</span>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <Button key={n} size="sm" variant={saved?.rating === n ? 'default' : 'outline'} disabled={!saved} onClick={() => onRate(n)} aria-label={`Rate ${n}`}>
-            {n}
-          </Button>
-        ))}
-        <Input
-          key={saved?.id}
-          aria-label="Notes"
-          placeholder="Notes"
-          className="h-8 text-xs"
-          disabled={!saved}
-          defaultValue={saved?.notes}
-          onBlur={(e) => e.target.value !== (saved?.notes ?? '') && onNotes(e.target.value)}
-        />
+    <div className="m-strip">
+      <div className={`m-cell${hit ? ' m-hit ttfr-flash' : ' m-wait'}`} key={hit ? 'hit' : 'wait'}>
+        <span className="lbl">Time to first render</span>
+        <span className="m-v m-big">
+          {hit ? secs(m.ttfrMs) : elapsedMs != null ? secs(elapsedMs) : '–'}
+          {hit && <Flag size={16} aria-hidden />}
+        </span>
       </div>
+      {cell('First token', secs(m.ttftMs))}
+      {cell('Total', m.totalMs != null ? secs(m.totalMs) : elapsedMs != null ? secs(elapsedMs) : '–', m.totalMs == null)}
+      {cell('Tokens in', m.inputTokens?.toLocaleString('en-US') ?? '–')}
+      {cell('Tokens out', m.outputTokens?.toLocaleString('en-US') ?? '–')}
+      {cell('Cost', usd(cost))}
+      {cell(
+        'Valid',
+        m.valid == null ? (
+          '–'
+        ) : m.valid ? (
+          <span className="v-ok inline-flex items-center gap-1">
+            <Check size={14} /> valid
+          </span>
+        ) : (
+          <span className="v-bad inline-flex items-center gap-1">
+            <X size={14} /> invalid
+          </span>
+        ),
+      )}
+      {cell('Errors', m.errorCount == null ? '–' : <span className={m.errorCount ? 'v-bad' : undefined}>{m.errorCount}</span>)}
     </div>
   )
 }

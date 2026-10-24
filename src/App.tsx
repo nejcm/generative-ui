@@ -1,15 +1,35 @@
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import type { Run } from '@/lib/run'
-import type { Model } from '@/models'
-import { CatalogPreview } from './ui/CatalogPreview'
-import { History } from './ui/History'
+import { ArrowDown, ArrowUp, Check, Copy, FlaskConical, History as HistoryIcon, Plus, Square, X } from 'lucide-react'
+import { approachById, approaches } from '@/approaches'
+import { usd } from '@/lib/cost'
+import type { Run, RunSummary } from '@/lib/run'
+import { models as registry, type Model, type Provider } from '@/models'
+import { presets } from '@/prompts'
+import { ApBadge, Indicator, live, Pips, secs, Seg, shortOf, type LaneSummary } from './ui/bits'
+import { History, loadBatch } from './ui/History'
 import { Pane, type PaneConfig, type RunRequest } from './ui/Pane'
 import { PromptBar } from './ui/PromptBar'
+import { Timeline } from './ui/Timeline'
 
 const PANES_KEY = 'playground.panes'
-const newPane = (approach: PaneConfig['approach']): PaneConfig => ({ key: crypto.randomUUID(), approach, modelId: '', settings: {} })
+const newPane = (approach: PaneConfig['approach']): PaneConfig => ({
+  key: crypto.randomUUID(),
+  approach,
+  modelId: '',
+  settings: {},
+})
+type Page = 'lab' | 'history'
+const pageTitle: Record<Page, string> = {
+  lab: 'Lab',
+  history: 'History',
+}
+const providers: [Provider, string][] = [
+  ['anthropic', 'Anthropic API'],
+  ['openai', 'OpenAI API'],
+  ['claude-code', 'Claude Code CLI'],
+  ['codex', 'Codex CLI'],
+  ['opencode', 'OpenCode CLI'],
+]
 
 function loadPanes(): PaneConfig[] {
   try {
@@ -21,14 +41,40 @@ function loadPanes(): PaneConfig[] {
   return [newPane('json-render'), newPane('flat-strict'), newPane('html')]
 }
 
+function ago(iso: string) {
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60000)
+  return min < 1 ? 'now' : min < 60 ? `${min}m` : min < 1440 ? `${Math.round(min / 60)}h` : `${Math.round(min / 1440)}d`
+}
+
+function finding(panes: PaneConfig[], summaries: Record<string, LaneSummary>) {
+  const lanes = panes.map((p) => summaries[p.key]).filter(Boolean)
+  const running = lanes.filter((l) => live(l.status)).length
+  if (running) return `${running} of ${panes.length} lanes streaming.`
+  const ran = lanes.filter((l) => l.metrics.totalMs != null)
+  if (!ran.length) return 'Run every lane on one prompt at once and compare how fast each reaches its first render.'
+  const first = ran.filter((l) => l.metrics.ttfrMs != null).sort((a, b) => a.metrics.ttfrMs! - b.metrics.ttfrMs!)[0]
+  const valid = ran.filter((l) => l.metrics.valid).length
+  if (!first) return `No lane rendered anything; ${valid} of ${ran.length} valid.`
+  const model = registry.find((m) => m.id === first.modelId)?.label ?? first.modelId
+  return `${shortOf(approachById(first.approach)!)} on ${model} rendered first, at ${secs(first.metrics.ttfrMs)}. ${valid} of ${ran.length} valid.`
+}
+
 export default function App() {
-  const [view, setView] = useState('play')
+  const [page, setPage] = useState<Page>('lab')
   const [models, setModels] = useState<Model[]>()
   const [panes, setPanes] = useState(loadPanes)
   const [loaded, setLoaded] = useState<Record<string, Run>>({})
-  const [draft, setDraft] = useState<Omit<RunRequest, 'batchId'>>({ prompt: '' })
+  const [draft, setDraft] = useState<Omit<RunRequest, 'batchId'>>({
+    prompt: '',
+  })
   const [batch, setBatch] = useState<RunRequest>()
   const [stopTick, setStopTick] = useState(0)
+  const [summaries, setSummaries] = useState<Record<string, LaneSummary>>({})
+  const [focusKey, setFocusKey] = useState<string>()
+  const [mode, setMode] = useState<'focus' | 'compare'>('focus')
+  const [hiddenInCompare, setHiddenInCompare] = useState<string[]>([])
+  const [recent, setRecent] = useState<RunSummary[]>([])
+  const [error, setError] = useState('')
 
   useEffect(() => {
     fetch('/api/models')
@@ -45,6 +91,16 @@ export default function App() {
     }
   }, [panes])
 
+  const savedKey = Object.values(summaries)
+    .map((s) => `${s.savedId}:${s.rating}`)
+    .join()
+  useEffect(() => {
+    fetch('/api/runs')
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setRecent)
+      .catch(() => setRecent([]))
+  }, [savedKey, page])
+
   function openBatch(runs: Run[]) {
     const configs = runs.map((run) => ({
       key: crypto.randomUUID(),
@@ -53,56 +109,348 @@ export default function App() {
       settings: run.settings as PaneConfig['settings'],
       systemOverride: run.systemOverridden ? run.system : undefined,
     }))
-    setPanes(configs.length >= 2 ? configs : [...configs, newPane('html')])
+    const next = configs.length >= 2 ? configs : [...configs, newPane('html')]
+    setPanes(next)
     setLoaded(Object.fromEntries(configs.map((c, i) => [c.key, runs[i]])))
-    setDraft({ prompt: runs[0].prompt, presetId: runs[0].presetId, fixtureId: runs[0].fixtureId })
-    setView('play')
+    setDraft({
+      prompt: runs[0].prompt,
+      presetId: runs[0].presetId,
+      fixtureId: runs[0].fixtureId,
+    })
+    setFocusKey(next[0].key)
+    setPage('lab')
   }
 
-  if (location.hash === '#catalog') return <CatalogPreview />
+  const openBatchId = (batchId: string) => loadBatch(batchId).then(openBatch, (e: Error) => setError(e.message))
+  const focusIndex = Math.max(
+    0,
+    panes.findIndex((p) => p.key === focusKey),
+  )
+  const focused = panes[focusIndex]
+  const anyLive = panes.some((p) => live(summaries[p.key]?.status))
+  const canRun = Boolean(models?.length) && Boolean(draft.prompt.trim())
+  const move = (i: number, delta: number) =>
+    setPanes((ps) => {
+      const next = [...ps]
+      ;[next[i], next[i + delta]] = [next[i + delta], next[i]]
+      return next
+    })
+
+  const batches = [...new Map(recent.map((r) => [r.batchId, r])).values()].slice(0, 6)
+  const toRate = recent.filter((r) => r.rating == null && !r.metrics.aborted).length
 
   return (
-    <main className="flex flex-col gap-4 p-4">
-      <Tabs value={view} onValueChange={setView}>
-        <div className="flex items-center gap-4">
-          <h1 className="font-semibold">Generative UI playground</h1>
-          <TabsList>
-            <TabsTrigger value="play">Playground</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
-          </TabsList>
-        </div>
-        <TabsContent value="play" keepMounted className="flex flex-col gap-4">
-          {models?.length === 0 && <p className="text-sm text-destructive">No models available: set a provider key in .env or log in to the claude or codex CLI.</p>}
-          <PromptBar
-            draft={draft}
-            canRun={Boolean(models?.length)}
-            onChange={setDraft}
-            onRun={() => setBatch({ ...draft, batchId: crypto.randomUUID() })}
-            onStop={() => setStopTick((t) => t + 1)}
-          />
-          <div className="flex items-start gap-4">
-            {panes.map((config) => (
-              <Pane
-                key={config.key}
-                config={config}
-                models={models ?? []}
-                draft={draft}
-                batch={batch}
-                stopTick={stopTick}
-                loaded={loaded[config.key]}
-                onChange={(next) => setPanes((ps) => ps.map((p) => (p.key === next.key ? next : p)))}
-                onRemove={panes.length > 2 ? () => setPanes((ps) => ps.filter((p) => p.key !== config.key)) : undefined}
-              />
-            ))}
-            {panes.length < 4 && (
-              <Button variant="outline" onClick={() => setPanes((ps) => [...ps, newPane('json-render')])}>
-                + Pane
-              </Button>
-            )}
+    <div className="gul shell">
+      <aside className="side">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden />
+          <div>
+            <b>Generative UI Lab</b>
+            <small className="mono">{location.host}</small>
           </div>
-        </TabsContent>
-        <TabsContent value="history">{view === 'history' && <History onOpenBatch={openBatch} />}</TabsContent>
-      </Tabs>
-    </main>
+        </div>
+        <nav className="snav" aria-label="Pages">
+          {(
+            [
+              ['lab', FlaskConical, null],
+              ['history', HistoryIcon, toRate ? `${toRate} to rate` : null],
+            ] as const
+          ).map(([id, Icon, count]) => (
+            <button key={id} type="button" className={page === id ? 'on' : undefined} aria-current={page === id ? 'page' : undefined} onClick={() => setPage(id)}>
+              <Icon size={16} />
+              {pageTitle[id]}
+              {count && <span className="cnt">{count}</span>}
+            </button>
+          ))}
+        </nav>
+        {batches.length > 0 && (
+          <>
+            <div className="sgroup">Recent batches</div>
+            {batches.map((r) => (
+              <button key={r.batchId} type="button" className="srow" title="Open batch in Lab" onClick={() => openBatchId(r.batchId)}>
+                <span className="mono muted">{recent.filter((x) => x.batchId === r.batchId).length}</span>
+                <span>{presets.find((p) => p.id === r.presetId)?.label ?? r.prompt}</span>
+                <span className="muted">{ago(r.createdAt)}</span>
+              </button>
+            ))}
+          </>
+        )}
+        <div className="sfoot" aria-label="Providers">
+          {models &&
+            providers.map(([id, label]) => {
+              const on = models.some((m) => m.provider === id)
+              return (
+                <div key={id} className={on ? undefined : 'muted'}>
+                  {on ? <Check size={13} className="v-ok" /> : <X size={13} />}
+                  {label}
+                </div>
+              )
+            })}
+        </div>
+      </aside>
+      <div className="main">
+        <header className="top">
+          <nav className="crumbs" aria-label="Breadcrumbs">
+            <span>Generative UI Lab</span>
+            <span>/</span>
+            <strong>{pageTitle[page]}</strong>
+          </nav>
+        </header>
+        <main className="sheet">
+          {error && (
+            <div className="notice" role="alert">
+              {error}
+            </div>
+          )}
+          <div hidden={page !== 'lab'} className="flex flex-col gap-3.5">
+            <div className="page-h">
+              <div>
+                <h1>Lab</h1>
+                <p>{finding(panes, summaries)}</p>
+              </div>
+              <div className="acts">
+                <button type="button" className="btn" disabled={!anyLive} onClick={() => setStopTick((t) => t + 1)}>
+                  <Square size={12} /> Stop all
+                </button>
+                <button type="button" className="btn btn-pri" disabled={!canRun} onClick={() => setBatch({ ...draft, batchId: crypto.randomUUID() })}>
+                  Run {panes.length} at once
+                </button>
+              </div>
+            </div>
+            {models?.length === 0 ? (
+              <section className="panel" style={{ padding: 14 }}>
+                <h2 style={{ fontSize: 14, fontWeight: 600 }}>No models available</h2>
+                <p className="caveat" style={{ margin: '4px 0 8px' }}>
+                  Add a provider key to .env and restart, or log in to the claude, codex or opencode CLI.
+                </p>
+                <pre className="sys">{'ANTHROPIC_API_KEY=sk-ant-…\nOPENAI_API_KEY=sk-…'}</pre>
+              </section>
+            ) : null}
+            <PromptBar draft={draft} onChange={setDraft} />
+            <Timeline panes={panes} summaries={summaries} focusKey={focused?.key} onFocus={setFocusKey} />
+            <div className="lab">
+              <div className="rail">
+                <div className="rail-h">
+                  <h2>Lanes</h2>
+                  <span className="muted">{panes.length} of 4</span>
+                  <button type="button" className="btn btn-sm ml-auto" disabled={panes.length >= 4} onClick={() => setPanes((ps) => [...ps, newPane('json-render')])}>
+                    <Plus size={13} /> Add lane
+                  </button>
+                </div>
+                {panes.map((config, i) => {
+                  const s = summaries[config.key]
+                  const approach = approachById(s?.approach ?? config.approach) ?? approaches[0]
+                  const model = registry.find((m) => m.id === (s?.modelId ?? config.modelId))
+                  const on = mode === 'focus' && config.key === focused?.key
+                  return (
+                    <div key={config.key} className={`ritem${on ? ' on' : ''}`}>
+                      <button
+                        type="button"
+                        className="ritem-main"
+                        aria-current={on ? 'true' : undefined}
+                        onClick={() => {
+                          setFocusKey(config.key)
+                          setMode('focus')
+                        }}
+                      >
+                        <span className="ritem-row">
+                          <span className="lbl">{i + 1}</span>
+                          <ApBadge approach={approach} />
+                          <span className="name">{model?.label ?? 'Choose a model'}</span>
+                          <span className="ml-auto">{s && <Indicator status={s.status} />}</span>
+                        </span>
+                        <span className="ritem-sub">
+                          {shortOf(approach)} · {s?.settings ?? 'default effort'}
+                        </span>
+                        {s && s.metrics.totalMs != null && (
+                          <span className="ritem-m">
+                            <span>TTFR {secs(s.metrics.ttfrMs)}</span>
+                            <span>{secs(s.metrics.totalMs)}</span>
+                            <span>{usd(s.cost)}</span>
+                            {s.metrics.errorCount ? <span className="v-bad">{s.metrics.errorCount} err</span> : null}
+                            {s.savedId && <Pips rating={s.rating} />}
+                          </span>
+                        )}
+                      </button>
+                      {live(s?.status) && (
+                        <div className="prog">
+                          <span />
+                        </div>
+                      )}
+                      {on && (
+                        <div className="ritem-tools">
+                          <button type="button" className="btn btn-sm btn-ico btn-ghost" aria-label="Move up" disabled={i === 0} onClick={() => move(i, -1)}>
+                            <ArrowUp size={13} />
+                          </button>
+                          <button type="button" className="btn btn-sm btn-ico btn-ghost" aria-label="Move down" disabled={i === panes.length - 1} onClick={() => move(i, 1)}>
+                            <ArrowDown size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            disabled={panes.length >= 4}
+                            onClick={() => setPanes((ps) => [...ps.slice(0, i + 1), { ...config, key: crypto.randomUUID() }, ...ps.slice(i + 1)])}
+                          >
+                            <Copy size={13} /> Duplicate
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ico btn-ghost"
+                            aria-label="Remove lane"
+                            disabled={panes.length <= 2}
+                            onClick={() => setPanes((ps) => ps.filter((p) => p.key !== config.key))}
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="flex min-w-0 flex-col gap-3.5">
+                {mode === 'compare' && (
+                  <Scorecard
+                    panes={panes}
+                    summaries={summaries}
+                    hidden={hiddenInCompare}
+                    onToggle={(key) => setHiddenInCompare((h) => (h.includes(key) ? h.filter((k) => k !== key) : [...h, key]))}
+                    onFocus={(key) => {
+                      setFocusKey(key)
+                      setMode('focus')
+                    }}
+                    onMode={setMode}
+                  />
+                )}
+                <div className={mode === 'compare' ? 'cmp-grid' : 'contents'}>
+                  {panes.map((config, i) => (
+                    <Pane
+                      key={config.key}
+                      config={config}
+                      models={models ?? []}
+                      draft={draft}
+                      batch={batch}
+                      stopTick={stopTick}
+                      loaded={loaded[config.key]}
+                      view={mode === 'compare' ? (hiddenInCompare.includes(config.key) ? 'hidden' : 'compare') : config.key === focused?.key ? 'focus' : 'hidden'}
+                      index={i}
+                      count={panes.length}
+                      mode={mode}
+                      onMode={setMode}
+                      onNav={(d) => setFocusKey(panes[i + d]?.key)}
+                      onFocus={() => {
+                        setFocusKey(config.key)
+                        setMode('focus')
+                      }}
+                      onSummary={(s) => setSummaries((all) => ({ ...all, [config.key]: s }))}
+                      onChange={(next) => setPanes((ps) => ps.map((p) => (p.key === next.key ? next : p)))}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          {page === 'history' && <History onOpenBatch={openBatch} />}
+        </main>
+      </div>
+    </div>
+  )
+}
+
+type Column = {
+  label: string
+  value: (s: LaneSummary) => number | null | undefined
+  format: (n: number) => string
+  higher?: boolean
+}
+const columns: Column[] = [
+  { label: 'TTFR', value: (s) => s.metrics.ttfrMs, format: (n) => secs(n) },
+  {
+    label: 'First token',
+    value: (s) => s.metrics.ttftMs,
+    format: (n) => secs(n),
+  },
+  { label: 'Total', value: (s) => s.metrics.totalMs, format: (n) => secs(n) },
+  {
+    label: 'Tokens out',
+    value: (s) => s.metrics.outputTokens,
+    format: (n) => n.toLocaleString('en-US'),
+  },
+  {
+    label: 'Cost',
+    value: (s) => (typeof s.cost === 'number' ? s.cost : null),
+    format: (n) => usd(n),
+  },
+]
+
+function Scorecard(props: {
+  panes: PaneConfig[]
+  summaries: Record<string, LaneSummary>
+  hidden: string[]
+  onToggle: (key: string) => void
+  onFocus: (key: string) => void
+  onMode: (mode: 'focus' | 'compare') => void
+}) {
+  const { panes, summaries, hidden, onToggle, onFocus, onMode } = props
+  const best = columns.map((c) => Math.min(...panes.map((p) => (summaries[p.key] ? (c.value(summaries[p.key]) ?? Infinity) : Infinity))))
+  return (
+    <>
+      <div className="stage-h">
+        <h2 style={{ fontSize: 15, fontWeight: 600 }}>Compare {panes.length} runs</h2>
+        <span className="muted">Best per column in bold, the rest as the gap to it.</span>
+        <div className="acts">
+          <Seg
+            label="Stage mode"
+            value="compare"
+            options={[
+              { value: 'focus', label: 'Focus' },
+              { value: 'compare', label: 'Compare' },
+            ]}
+            onChange={onMode}
+          />
+        </div>
+      </div>
+      <section className="score" aria-label="Scorecard">
+        <div className="score-g score-h">
+          <span className="sr-only">Show</span>
+          <span>#</span>
+          <span>Run</span>
+          {columns.map((c) => (
+            <span key={c.label}>{c.label}</span>
+          ))}
+          <span>Valid</span>
+          <span>Errors</span>
+          <span>Rating</span>
+        </div>
+        {panes.map((p, i) => {
+          const s = summaries[p.key]
+          const approach = approachById(s?.approach ?? p.approach)!
+          const model = registry.find((m) => m.id === s?.modelId)
+          return (
+            <div key={p.key} className={`score-g score-r${hidden.includes(p.key) ? ' off' : ''}${live(s?.status) ? ' live' : ''}`}>
+              <input type="checkbox" aria-label={`Show run ${i + 1}`} checked={!hidden.includes(p.key)} onChange={() => onToggle(p.key)} />
+              <span className="lbl">{i + 1}</span>
+              <button type="button" className="sc-run" onClick={() => onFocus(p.key)}>
+                <ApBadge approach={approach} />
+                <span>{model?.label ?? '–'}</span>
+              </button>
+              {columns.map((c, ci) => {
+                const v = s ? c.value(s) : null
+                const isBest = v != null && v === best[ci] && Number.isFinite(best[ci])
+                return (
+                  <span key={c.label} className={`sc${isBest ? ' best' : ''}`}>
+                    <span className="v">{v == null ? '–' : c.format(v)}</span>
+                    {v != null && <span className="d">{isBest ? 'best' : `+${c.format(v - best[ci])}`}</span>}
+                  </span>
+                )
+              })}
+              <span className="sc">{s?.metrics.valid == null ? '–' : s.metrics.valid ? <span className="v-ok">valid</span> : <span className="v-bad">invalid</span>}</span>
+              <span className="sc">{s?.metrics.errorCount ?? '–'}</span>
+              <span className="sc">{s?.savedId ? <Pips rating={s.rating} /> : '–'}</span>
+            </div>
+          )
+        })}
+      </section>
+    </>
   )
 }

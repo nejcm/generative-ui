@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { approachById } from '@/approaches'
-import { Button } from '@/components/ui/button'
+import { Pause, Play, RotateCcw } from 'lucide-react'
 import { frameIndexAt, frames as computeFrames, nextEpoch, runClock, stateAt, whenCurrent, type Frame } from '@/lib/playback'
 import type { Run } from '@/lib/run'
-import { Choice } from './Choice'
-import { Result } from './Result'
+import { Seg } from './bits'
+import { Result, stripOf, type OutputView } from './Result'
 
 const speeds = ['0.5', '1', '2', '4'] as const
-const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`
+const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`
 
-export function Replay({ run }: { run: Run }) {
+export function Replay({ run, view, status }: { run: Run; view?: OutputView; status?: string }) {
   const approach = approachById(run.approach)!
   // The server's totalMs excludes the hop to the browser, so the last delta can land after it.
   const total = Math.max(run.metrics.totalMs, run.deltas?.at(-1)?.[0] ?? 0)
@@ -38,25 +38,34 @@ export function Replay({ run }: { run: Run }) {
   }, [playing, speed, total])
 
   if (!run.deltas) return null
-  if (!frames) return <p className="text-sm text-muted-foreground">Preparing…</p>
+  if (!frames) return <p className="muted">Preparing…</p>
 
   const atEnd = frameIndexAt(frames, playhead) === frames.length - 1
   const state = stateAt(frames, playhead)
+  const raw = run.deltas
+    .filter(([t]) => t <= playhead)
+    .map(([, text]) => text)
+    .join('')
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          size="sm"
+        <button
+          type="button"
+          className="btn btn-pri btn-ico"
+          aria-label={playing ? 'Pause replay' : 'Play replay'}
           onClick={() => {
             if (!playing && playhead >= total) seek(0)
             setPlaying(!playing)
           }}
         >
-          {playing ? 'Pause' : 'Play'}
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => seek(0)}>
-          Restart
-        </Button>
+          {playing ? <Pause size={14} /> : <Play size={14} />}
+        </button>
+        <button type="button" className="btn btn-ico" aria-label="Restart replay" onClick={() => seek(0)}>
+          <RotateCcw size={14} />
+        </button>
+        <span className="mono tnum" style={{ fontSize: 12.5 }}>
+          {seconds(playhead)} / {seconds(total)}
+        </span>
         <input
           type="range"
           aria-label="Replay position"
@@ -65,17 +74,20 @@ export function Replay({ run }: { run: Run }) {
           step={1}
           value={Math.round(playhead)}
           onChange={(e) => seek(Number(e.target.value))}
-          className="min-w-32 flex-1"
+          className="range min-w-32 flex-1"
         />
-        <span className="text-sm tabular-nums">
-          {seconds(playhead)} / {seconds(total)}
-        </span>
-        <div className="w-24">
-          <Choice label="Replay speed" value={speed} options={speeds.map((s) => ({ value: s, label: `${s}×` }))} onChange={setSpeed} />
-        </div>
+        <Seg label="Replay speed" value={speed} options={speeds.map((s) => ({ value: s, label: `${s}×` }))} onChange={setSpeed} />
       </div>
-      <p className="text-xs text-muted-foreground">Timing is as the browser received it, so it includes the server hop and any CLI buffering.</p>
-      <Result key={`${run.id}:${epoch}`} approach={approach} state={state} errors={atEnd ? run.metrics.errors : state.errors} />
+      <p className="caveat">Timing is as the browser received it, so it includes the server hop and any CLI buffering.</p>
+      <Result
+        key={`${run.id}:${epoch}`}
+        approach={approach}
+        state={state}
+        raw={raw}
+        view={view}
+        live={playing}
+        strip={atEnd && status ? stripOf(status, run.metrics.errors) : undefined}
+      />
     </div>
   )
 }

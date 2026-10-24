@@ -1,45 +1,60 @@
-import { Button } from '@/components/ui/button'
 import { fixtures, presets } from '@/prompts'
 import { Choice } from './Choice'
 import type { RunRequest } from './Pane'
 
 type Draft = Omit<RunRequest, 'batchId'>
 
-type Props = { draft: Draft; canRun: boolean; onChange: (draft: Draft) => void; onRun: () => void; onStop: () => void }
-
-export function PromptBar({ draft, canRun, onChange, onRun, onStop }: Props) {
+export function PromptBar({ draft, onChange }: { draft: Draft; onChange: (draft: Draft) => void }) {
+  const preset = presets.find((p) => p.id === draft.presetId)
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex gap-2">
-        <Choice
-          label="Preset"
-          value={draft.presetId ?? ''}
-          options={[{ value: '', label: 'Free text' }, ...presets.map((p) => ({ value: p.id, label: p.label }))]}
-          onChange={(id) => {
-            const preset = presets.find((p) => p.id === id)
-            onChange(preset ? { prompt: preset.prompt, presetId: preset.id, fixtureId: preset.fixtureId } : { ...draft, presetId: undefined })
-          }}
-        />
-        <Choice
-          label="Fixture"
-          value={draft.fixtureId ?? ''}
-          options={[{ value: '', label: 'No fixture' }, ...Object.keys(fixtures).map((id) => ({ value: id, label: `Fixture: ${id}` }))]}
-          onChange={(id) => onChange({ ...draft, fixtureId: id || undefined })}
-        />
-        <Button disabled={!canRun || !draft.prompt.trim()} onClick={onRun}>
-          Run all
-        </Button>
-        <Button variant="outline" onClick={onStop}>
-          Stop all
-        </Button>
+    <section className="panel flex flex-col gap-2.5" style={{ padding: 14 }} aria-label="Prompt">
+      <div className="flex items-center gap-2">
+        <label htmlFor="prompt" className="lbl">
+          Prompt
+        </label>
+        <span className={`tag${preset ? ' tag-sig' : ''}`}>{preset ? `Preset: ${preset.label}` : draft.prompt.trim() ? 'Free text' : 'Empty'}</span>
+        <div className="ml-auto w-[200px]">
+          <Choice
+            label="Fixture"
+            value={draft.fixtureId ?? ''}
+            options={[
+              { value: '', label: 'No fixture' },
+              ...Object.keys(fixtures).map((id) => ({
+                value: id,
+                label: `Fixture: ${id}`,
+              })),
+            ]}
+            onChange={(id) => onChange({ ...draft, fixtureId: id || undefined })}
+          />
+        </div>
       </div>
       <textarea
-        aria-label="Prompt"
-        placeholder="Describe the UI to generate"
-        className="h-20 w-full rounded-md border bg-transparent p-2 text-sm"
+        id="prompt"
+        className="prompt"
+        placeholder="Describe the UI to generate, or pick a preset below"
         value={draft.prompt}
         onChange={(e) => onChange({ ...draft, prompt: e.target.value, presetId: undefined })}
       />
-    </div>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Presets">
+        {presets.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`chip${p.id === draft.presetId ? ' on' : ''}`}
+            aria-pressed={p.id === draft.presetId}
+            onClick={() =>
+              onChange({
+                prompt: p.prompt,
+                presetId: p.id,
+                fixtureId: p.fixtureId,
+              })
+            }
+          >
+            {p.label}
+            {p.fixtureId && <span className="fx">{p.fixtureId}</span>}
+          </button>
+        ))}
+      </div>
+    </section>
   )
 }
