@@ -25,7 +25,7 @@ export async function loadBatch(batchId: string) {
   )
 }
 
-const presetLabel = (id?: string) => presets.find((p) => p.id === id)?.label ?? 'Free text'
+const presetLabel = (id?: string) => presets.find((p) => p.id === id)?.label ?? 'Custom'
 const modelLabel = (id: string) => models.find((m) => m.id === id)?.label ?? id
 
 export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void }) {
@@ -83,6 +83,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
           <thead>
             <tr>
               <th>#</th>
+              <th>Preset</th>
               <th>Approach</th>
               <th>Model</th>
               <th className="num">TTFR</th>
@@ -95,10 +96,10 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
             {batches.map((group) => (
               <Fragment key={group[0].batchId}>
                 <tr className="batch">
-                  <td colSpan={7}>
+                  <td colSpan={8}>
                     <div className="flex items-center gap-3">
                       <span>
-                        {presetLabel(group[0].presetId)} · {group.length} {group.length === 1 ? 'run' : 'runs'}
+                        {group.every((r) => r.presetId === group[0].presetId) ? `${presetLabel(group[0].presetId)} · ` : ''}{group.length} {group.length === 1 ? 'run' : 'runs'}
                       </span>
                       <span className="muted" style={{ fontWeight: 400 }}>
                         {new Date(group[0].createdAt).toLocaleString()} · {batchUsd(group.map(costOf))}
@@ -123,6 +124,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
                       }}
                     >
                       <td className="muted">{i + 1}</td>
+                      <td>{presetLabel(r.presetId)}</td>
                       <td>
                         <span className="inline-flex items-center gap-2">
                           <ApBadge approach={approachById(r.approach)!} />
@@ -139,7 +141,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
                     </tr>
                     {sel?.id === r.id && selected && (
                       <tr className="det">
-                        <td colSpan={7}>
+                        <td colSpan={8}>
                           <div className="hdet">
                             <div className="hinfo">
                               <div className="flex items-center gap-2">
