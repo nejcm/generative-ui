@@ -1,5 +1,6 @@
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
 import { readNdjson, type RunEvent } from '../src/lib/ndjson.ts'
 import { cliArgs, eventMapper, killAllClis, opencodeConfigText, probeClis, runCli, type CliProvider } from './cli.ts'
@@ -21,7 +22,14 @@ vi.mock('node:child_process', async (importOriginal) => {
   }
 })
 
+const managed = vi.hoisted(() => new Set<string>())
+vi.mock('node:fs', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:fs')>()
+  return { ...real, existsSync: (path: string) => managed.has(path) || real.existsSync(path) }
+})
+
 afterEach(() => {
+  managed.clear()
   fake.scripts = {}
   fake.calls = []
   vi.unstubAllEnvs()
@@ -102,6 +110,33 @@ test('opencode runs standalone with a private deny-all config, the system prompt
     OPENCODE_DISABLE_PROJECT_CONFIG: '1',
     OPENCODE_DISABLE_CLAUDE_CODE: '1',
   })
+})
+
+test('opencode refuses to run while a managed config, which could re-grant tools, exists', async () => {
+  const fixture = { darwin: '/Library/Application Support/opencode', win32: join(process.env.ProgramData || 'C:\\ProgramData', 'opencode') }
+  managed.add(fixture[process.platform as keyof typeof fixture] ?? '/etc/opencode')
+  fake.scripts.opencode = replay('opencode-text')
+  const events = await collect(runCli('opencode', job, new AbortController().signal))
+  expect(events).toEqual([{ t: 'error', message: expect.stringContaining('managed config') }])
+  expect(fake.calls).toEqual([])
+})
+
+test('on Windows the managed-config guard checks the ProgramData the child receives', async () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+  Object.defineProperty(process, 'platform', { value: 'win32' })
+  try {
+    vi.stubEnv('ProgramData', 'D:\\PD')
+    managed.add(join('D:\\PD', 'opencode'))
+    const events = await collect(runCli('opencode', job, new AbortController().signal))
+    expect(events).toEqual([{ t: 'error', message: expect.stringContaining(join('D:\\PD', 'opencode')) }])
+  } finally {
+    Object.defineProperty(process, 'platform', platform)
+  }
+  managed.clear()
+  vi.stubEnv('ProgramData', 'D:\\PD')
+  fake.scripts.opencode = replay('opencode-text')
+  await collect(runCli('opencode', job, new AbortController().signal))
+  expect(lastRun().opts.env).toHaveProperty('ProgramData', 'D:\\PD')
 })
 
 test('runs claude in a removed temp dir with no tools, an allowlisted env and the prompt on stdin', async () => {
@@ -203,12 +238,13 @@ test('probe lists only installed CLIs logged in with a subscription', async () =
   fake.scripts.codex = `console.error('Not logged in');process.exit(1)`
   fake.scripts.opencode = `console.log(JSON.stringify([{id:'opencode-go',name:'OpenCode Go',connections:[{type:'credential',label:'API key',method:'key'}]}]))`
   expect(await probeClis()).toEqual(['claude-code', 'opencode'])
-  expect(fake.calls.map((c) => [c.bin, ...c.args])).toEqual([
+  // Probes run concurrently and each awaits mkdtemp before spawning, so spawn order varies.
+  expect(fake.calls.map((c) => [c.bin, ...c.args]).sort()).toEqual([
     ['claude', 'auth', 'status', '--json'],
     ['codex', 'login', 'status'],
     ['opencode', 'auth', 'list', '--standalone', '--format', 'json'],
   ])
-  expect(fake.calls[2].opts.env).toHaveProperty('XDG_CONFIG_HOME', expect.stringContaining('playground-cli-'))
+  expect(fake.calls.find((c) => c.bin === 'opencode')!.opts.env).toHaveProperty('XDG_CONFIG_HOME', expect.stringContaining('playground-cli-'))
   fake.scripts.claude = `console.log(JSON.stringify({loggedIn:true,authMethod:'api_key'}))`
   fake.scripts.codex = `console.error('Logged in using an API key - sk-***')`
   fake.scripts.opencode = `console.log(JSON.stringify([{id:'opencode',connections:[{}]},{id:'opencode-go',connections:[]}]))`

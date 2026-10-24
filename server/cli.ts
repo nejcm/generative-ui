@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
+import { homedir, tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { RunEvent } from '../src/lib/ndjson.ts'
@@ -18,7 +18,7 @@ const envKeys = new Set([
   'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'TZ', 'TERM',
   'CODEX_CA_CERTIFICATE', 'ALL_PROXY', 'all_proxy',
   'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR', 'DBUS_SESSION_BUS_ADDRESS',
-  'CLAUDE_CONFIG_DIR', 'CODEX_HOME',
+  'CLAUDE_CONFIG_DIR', 'CODEX_HOME', 'ProgramData',
   'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'no_proxy', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NODE_EXTRA_CA_CERTS',
 ])
 const cliEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => envKeys.has(k) || k.startsWith('LC_')))
@@ -49,6 +49,15 @@ const opencodeConfig = (system: string) => ({
   snapshots: false,
   websearch: false,
 })
+
+// Managed config loads after ours and can re-grant tools, so its presence blocks runs (paths from opencode's config discovery).
+const managedOpencodeConfig = () =>
+  (process.platform === 'darwin'
+    ? ['/Library/Application Support/opencode', `/Library/Managed Preferences/${userInfo().username}/ai.opencode.managed.plist`, '/Library/Managed Preferences/ai.opencode.managed.plist']
+    : process.platform === 'win32'
+      ? [join(cliEnv().ProgramData || 'C:\\ProgramData', 'opencode')]
+      : ['/etc/opencode']
+  ).find((path) => existsSync(path))
 
 // opencode substitutes {env:…} and {file:…} in raw config text; a JSON \u escape survives that and parses back to "{".
 export const opencodeConfigText = (system: string) => JSON.stringify(opencodeConfig(system)).replace(/\{(?=(env|file):)/g, '\\u007b')
@@ -265,6 +274,12 @@ export function runCli(provider: CliProvider, job: Job, signal: AbortSignal, tim
         if (provider === 'claude-code' && !(await loggedIn['claude-code'](10_000).catch(() => false))) {
           failed = true
           send({ t: 'error', message: 'claude is not logged in with a Claude subscription (claude.ai); run `claude auth login`' })
+          return
+        }
+        const managed = provider === 'opencode' && managedOpencodeConfig()
+        if (managed) {
+          failed = true
+          send({ t: 'error', message: `opencode runs are refused while managed config ${managed} exists: it could re-enable tools` })
           return
         }
         const started = performance.now()

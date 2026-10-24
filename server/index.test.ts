@@ -93,6 +93,17 @@ test('POST /api/run rejects an effort the model does not list', async () => {
   expect((await post(body('kimi-k3-opencode-go', 'low'))).status).toBe(400)
 })
 
+test('POST /api/run treats an empty effort as the default', async () => {
+  const model = new MockLanguageModelV4({
+    doStream: async () => ({ stream: new ReadableStream({ start: (c) => (c.enqueue({ type: 'finish', usage, finishReason: { unified: 'stop', raw: 'end_turn' } }), c.close()) }) }),
+  })
+  mock.model = model
+  const res = await post(JSON.stringify({ ...JSON.parse(runBody()), settings: { effort: '' } }))
+  expect(res.status).toBe(200)
+  await res.text()
+  expect(model.doStreamCalls[0].reasoning).toBeUndefined()
+})
+
 test('POST /api/run rejects an unknown model', async () => {
   const res = await post(JSON.stringify({ ...JSON.parse(runBody()), modelId: 'nope' }))
   expect(res.status).toBe(400)

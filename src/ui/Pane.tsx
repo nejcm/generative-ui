@@ -239,7 +239,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
           <p className="text-xs text-muted-foreground">
             Runs via your local CLI: start-up latency skews TTFT/TTFR,{' '}
             {model.provider === 'opencode'
-              ? 'OpenCode adds environment details (working directory, model name) to the system prompt and sends each reply whole, all tools are denied, /etc/opencode and org well-known config still load, Go bills your credit balance past its quota if Extra Usage is on,'
+              ? 'OpenCode adds environment details (working directory, model name) to the system prompt and sends each reply whole, opencode tool permissions are denied but plugins from an org well-known config you added can still run, runs refuse to start while a managed config exists (/etc/opencode, macOS /Library, Windows ProgramData), Go bills your credit balance past its quota if Extra Usage is on,'
               : 'the harness adds its own context (Codex may include your global AGENTS instructions), runs are read-only sandboxed but not tool-free,'}{' '}
             and usage counts against your plan.
           </p>

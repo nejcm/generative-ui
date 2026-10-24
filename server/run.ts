@@ -34,7 +34,7 @@ export async function run(c: Context) {
   // Fires when the client disconnects (@hono/node-server aborts the request on premature close).
   const signal = c.req.raw.signal
   const strict = output.kind === 'json-schema' && model.supports.strictJson
-  const { effort } = settings
+  const effort = settings.effort || undefined
   if (effort && !model.supports.effort?.includes(effort)) return c.json({ error: `Unsupported effort for ${modelId}: ${effort}` }, 400)
   const headers = { 'content-type': 'application/x-ndjson', 'x-strict-output': String(strict) }
   if (isCli(model.provider)) {
