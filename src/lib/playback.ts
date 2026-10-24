@@ -44,3 +44,52 @@ export async function frames(approach: Approach, deltas: [number, string][]): Pr
   add(out.at(-1)?.t ?? 0, withErrors(end, failure))
   return out
 }
+
+const empty: ParseState = { renderable: false, errors: [] }
+
+// Index of the last frame with t <= playhead, -1 before the first.
+export function frameIndexAt(frames: Frame[], playhead: number) {
+  let [lo, hi] = [0, frames.length]
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (frames[mid].t <= playhead) lo = mid + 1
+    else hi = mid
+  }
+  return lo - 1
+}
+
+export const stateAt = (frames: Frame[], playhead: number) => frames[frameIndexAt(frames, playhead)]?.state ?? empty
+
+// Advances playhead.current by wall-clock time × speed each animation frame until end; seeks can write playhead.current meanwhile.
+// Cancelling counts the time since the last frame, so pausing or changing speed loses none.
+export function runClock(playhead: { current: number }, end: number, speed: number, onTick: (t: number) => void) {
+  let last = performance.now()
+  const advance = (now: number) => {
+    playhead.current = Math.min(end, playhead.current + Math.max(0, now - last) * speed)
+    last = now
+    onTick(playhead.current)
+  }
+  const step = (now: number) => {
+    advance(now)
+    id = playhead.current < end ? requestAnimationFrame(step) : 0
+  }
+  let id = requestAnimationFrame(step)
+  return () => {
+    if (!id) return
+    cancelAnimationFrame(id)
+    id = 0
+    advance(performance.now())
+  }
+}
+
+// Seeking backwards bumps the epoch so renderers with their own state (SpecView's store) remount instead of keeping later state.
+export const nextEpoch = (epoch: number, from: number, to: number) => (to < from ? epoch + 1 : epoch)
+
+// Applies the result only while still current; returns the cancel for an effect cleanup.
+export function whenCurrent<T>(promise: Promise<T>, apply: (value: T) => void) {
+  let current = true
+  promise.then((value) => current && apply(value))
+  return () => {
+    current = false
+  }
+}

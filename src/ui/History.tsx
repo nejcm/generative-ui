@@ -7,6 +7,7 @@ import type { Run, RunSummary } from '@/lib/run'
 import { models } from '@/models'
 import { presets } from '@/prompts'
 import { Choice } from './Choice'
+import { Replay } from './Replay'
 import { Result } from './Result'
 
 const getJson = async <T,>(url: string): Promise<T> => {
@@ -89,7 +90,11 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
       {selected && (
         <section className="flex flex-col gap-2">
           <p className="text-sm text-muted-foreground">{selected.run.prompt}</p>
-          <Result key={selected.run.id} approach={selected.approach} state={selected.state} errors={selected.run.metrics.errors} />
+          {selected.run.deltas ? (
+            <Replay key={selected.run.id} run={selected.run} />
+          ) : (
+            <Result key={selected.run.id} approach={selected.approach} state={selected.state} errors={selected.run.metrics.errors} />
+          )}
         </section>
       )}
     </div>
