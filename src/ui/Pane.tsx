@@ -68,6 +68,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
     const parser = approach.createParser()
     let state: ParseState = { renderable: false, errors: [] }
     let rawOutput = ''
+    const deltas: [number, string][] = []
     let ttfrMs: number | null = null
     let usage: Usage | undefined
     let strictOutput: boolean | null = null
@@ -94,6 +95,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
       for await (const event of readNdjson(res.body)) {
         if (event.t === 'delta') {
           rawOutput += event.text
+          deltas.push([Math.round(performance.now() - started), event.text])
           state = await parser.push(event.text)
           if (state.renderable && ttfrMs === null) {
             ttfrMs = performance.now() - started
@@ -126,6 +128,7 @@ export function Pane({ config, models, draft, batch, stopTick, loaded, onChange,
       systemOverridden: config.systemOverride !== undefined,
       strictOutput,
       rawOutput,
+      deltas,
       metrics: {
         ttftMs: done?.ttftMs ?? null,
         ttfrMs,

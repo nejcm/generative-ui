@@ -1,8 +1,31 @@
 import { expect, test } from 'vitest'
-import { strictOutputOf } from './run'
+import { RunRecord, strictOutputOf } from './run'
 
 test('strict output is unknown unless the server said so', () => {
   expect(strictOutputOf(new Headers())).toBeNull()
   expect(strictOutputOf(new Headers({ 'x-strict-output': 'true' }))).toBe(true)
   expect(strictOutputOf(new Headers({ 'x-strict-output': 'false' }))).toBe(false)
+})
+
+const run = {
+  id: 'r1',
+  createdAt: '2026-10-24T04:03:05.123Z',
+  batchId: 'b1',
+  approach: 'html',
+  modelId: 'm',
+  settings: {},
+  prompt: 'p',
+  system: 's',
+  systemHash: 'a'.repeat(64),
+  systemOverridden: false,
+  strictOutput: null,
+  rawOutput: '<p>hi</p>',
+  metrics: { ttftMs: null, ttfrMs: null, totalMs: 1, inputTokens: null, outputTokens: null, costUsd: null, valid: true, errorCount: 0, errors: [], aborted: false },
+}
+
+test('deltas are optional but must join to rawOutput', () => {
+  expect(RunRecord.safeParse(run).success).toBe(true)
+  expect(RunRecord.safeParse({ ...run, deltas: [[0, '<p>'], [12, 'hi</p>']] }).success).toBe(true)
+  expect(RunRecord.safeParse({ ...run, deltas: [[0, '<p>'], [12, 'ho</p>']] }).success).toBe(false)
+  expect(RunRecord.safeParse({ ...run, deltas: [[-1, '<p>hi</p>']] }).success).toBe(false)
 })

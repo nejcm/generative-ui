@@ -19,6 +19,8 @@ export const RunRecord = z.strictObject({
   systemOverridden: z.boolean(),
   strictOutput: z.boolean().nullable(),
   rawOutput: z.string(),
+  // [ms since request start, text] per streamed delta; absent on runs saved before replay.
+  deltas: z.array(z.tuple([z.number().int().min(0), z.string()])).optional(),
   metrics: z.strictObject({
     ttftMs: z.number().nullable(),
     ttfrMs: z.number().nullable(),
@@ -34,7 +36,7 @@ export const RunRecord = z.strictObject({
   }),
   rating: z.int().min(1).max(5).optional(),
   notes: z.string().optional(),
-})
+}).refine((run) => !run.deltas || run.deltas.map((d) => d[1]).join('') === run.rawOutput, { message: 'deltas do not join to rawOutput', path: ['deltas'] })
 
 export const RunPatch = z.strictObject({ rating: z.int().min(1).max(5).optional(), notes: z.string().optional() })
 
@@ -44,4 +46,4 @@ export const strictOutputOf = (headers: Headers) => {
 }
 
 export type Run = z.infer<typeof RunRecord>
-export type RunSummary = Omit<Run, 'system' | 'rawOutput'>
+export type RunSummary = Omit<Run, 'system' | 'rawOutput' | 'deltas'>

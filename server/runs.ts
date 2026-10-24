@@ -30,7 +30,7 @@ export function runsApi(dir: string) {
       const runs = (await Promise.all((await files()).map((f) => read(f).catch(() => console.warn(`skipping unreadable run ${f}`))))).filter((r) => r !== undefined)
       const summaries: RunSummary[] = runs
         .filter((r) => (!batchId || r.batchId === batchId) && (!presetId || r.presetId === presetId))
-        .map(({ system: _s, rawOutput: _o, ...summary }) => summary)
+        .map(({ system: _s, rawOutput: _o, deltas: _d, ...summary }) => summary)
       return c.json(summaries)
     })
     .get('/:id', async (c) => {
@@ -38,7 +38,7 @@ export function runsApi(dir: string) {
       return file ? c.json(await read(file)) : c.json({ error: 'not found' }, 404)
     })
     .post('/', async (c) => {
-      const parsed = RunRecord.extend({ createdAt: z.iso.datetime({ precision: 3 }) }).safeParse(await c.req.json().catch(() => undefined))
+      const parsed = RunRecord.safeExtend({ createdAt: z.iso.datetime({ precision: 3 }) }).safeParse(await c.req.json().catch(() => undefined))
       if (!parsed.success) return c.json({ error: z.prettifyError(parsed.error) }, 400)
       return serial(async () => {
         if (await find(parsed.data.id)) return c.json({ error: 'run exists' }, 409)

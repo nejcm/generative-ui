@@ -95,6 +95,16 @@ test('an unreadable run file does not break the listing', async () => {
   expect(await list()).toEqual(['r1'])
 })
 
+test('deltas are kept by GET /:id and PATCH, dropped from the list, and must join to rawOutput', async () => {
+  const deltas: [number, string][] = [[0, '<p>'], [30, 'hi</p>']]
+  expect((await send('POST', '/', run({ deltas: [[0, 'x']] }))).status).toBe(400)
+  expect((await send('POST', '/', run({ deltas }))).status).toBe(201)
+  const [summary] = (await (await api.request('/')).json()) as object[]
+  expect(summary).not.toHaveProperty('deltas')
+  await send('PATCH', '/r1', { rating: 5 })
+  expect(await (await api.request('/r1')).json()).toMatchObject({ deltas, rating: 5 })
+})
+
 test('a run with unknown strict output is accepted', async () => {
   expect((await send('POST', '/', run({ strictOutput: null }))).status).toBe(201)
 })
