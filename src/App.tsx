@@ -265,7 +265,7 @@ export default function App() {
         <main className="sheet">
           {error && (
             <div className="notice" role="alert">
-              {error}
+              {DEMO ? `This is a static demo showcasing saved runs; it can't call models. A saved run failed to load (${error}).` : error}
             </div>
           )}
           <div hidden={page !== 'lab'} className="flex flex-col gap-3.5">
