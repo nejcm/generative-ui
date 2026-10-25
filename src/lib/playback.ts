@@ -101,12 +101,3 @@ export function runClock(playhead: { current: number }, end: number, speed: numb
 
 // Seeking backwards bumps the epoch so renderers with their own state (SpecView's store) remount instead of keeping later state.
 export const nextEpoch = (epoch: number, from: number, to: number) => (to < from ? epoch + 1 : epoch)
-
-// Applies the result only while still current; returns the cancel for an effect cleanup.
-export function whenCurrent<T>(promise: Promise<T>, apply: (value: T) => void) {
-  let current = true
-  promise.then((value) => current && apply(value))
-  return () => {
-    current = false
-  }
-}

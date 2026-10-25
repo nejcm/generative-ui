@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { approachById, type Approach } from '@/approaches'
+import { getJson, whenCurrent } from '@/lib/async'
 import type { RunSummary } from '@/lib/run'
 import { groupBy, summarize, topErrors, type Group } from '@/lib/stats'
 import { presets } from '@/prompts'
@@ -177,11 +178,10 @@ export function Stats() {
   const [runs, setRuns] = useState<RunSummary[]>()
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    fetch(`/api/runs${presetId ? `?presetId=${encodeURIComponent(presetId)}` : ''}`)
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-      .then(setRuns, (e: Error) => setError(e.message))
-  }, [presetId])
+  useEffect(
+    () => whenCurrent(getJson<RunSummary[]>(`/api/runs${presetId ? `?presetId=${encodeURIComponent(presetId)}` : ''}`), setRuns, (e) => setError(e.message)),
+    [presetId],
+  )
 
   return (
     <div className="flex flex-col gap-3.5">

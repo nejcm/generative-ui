@@ -3,7 +3,7 @@ import { approachById, approaches, parseAll, type Approach, type ParseState } fr
 import { catalog } from '@/catalog/catalog'
 import { ChevronLeft, ChevronRight, Square } from 'lucide-react'
 import { runCost } from '@/lib/cost'
-import { whenCurrent } from '@/lib/playback'
+import { whenCurrent } from '@/lib/async'
 import { record, type RunRequest } from '@/lib/recorder'
 import type { Run } from '@/lib/run'
 import { models as registry, type Model } from '@/models'

@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { approachById, parseAll, type Approach, type ParseState } from '@/approaches'
+import { getJson, whenCurrent } from '@/lib/async'
 import { batchUsd, runCost, usd } from '@/lib/cost'
 import type { Run, RunSummary } from '@/lib/run'
 import { models } from '@/models'
@@ -8,12 +9,6 @@ import { ApBadge, Collapsible, Errors, Pips, secs, statusOf, words } from './bit
 import { Choice } from './Choice'
 import { Replay } from './Replay'
 import { Result, stripOf } from './Result'
-
-const getJson = async <T,>(url: string): Promise<T> => {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
-}
 
 export async function loadBatch(batchId: string) {
   const batch = await getJson<RunSummary[]>(`/api/runs?batchId=${encodeURIComponent(batchId)}`)
@@ -38,21 +33,29 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
     state: ParseState
   }>()
 
-  useEffect(() => {
-    getJson<RunSummary[]>(`/api/runs${presetId ? `?presetId=${encodeURIComponent(presetId)}` : ''}`)
-      .then(setRuns)
-      .catch((e: Error) => setError(e.message))
-  }, [presetId])
+  const selecting = useRef<string>(undefined)
+
+  useEffect(
+    () => whenCurrent(getJson<RunSummary[]>(`/api/runs${presetId ? `?presetId=${encodeURIComponent(presetId)}` : ''}`), setRuns, (e) => setError(e.message)),
+    [presetId],
+  )
 
   async function toggle(id: string) {
-    if (selected?.run.id === id) return setSelected(undefined)
-    const run = await getJson<Run>(`/api/runs/${id}`)
-    const approach = approachById(run.approach)!
-    setSelected({
-      run,
-      approach,
-      state: await parseAll(approach, run.rawOutput),
-    })
+    if (selected?.run.id === id) {
+      selecting.current = undefined
+      return setSelected(undefined)
+    }
+    selecting.current = id
+    try {
+      const run = await getJson<Run>(`/api/runs/${id}`)
+      if (selecting.current !== id) return
+      const approach = approachById(run.approach)!
+      const state = await parseAll(approach, run.rawOutput)
+      if (selecting.current !== id) return
+      setSelected({ run, approach, state })
+    } catch (e) {
+      if (selecting.current === id) throw e
+    }
   }
 
   const costOf = (r: RunSummary) =>
@@ -116,7 +119,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
                       className={`run${sel?.id === r.id ? ' on' : ''}`}
                       tabIndex={0}
                       aria-expanded={sel?.id === r.id}
-                      onClick={act(() => toggle(r.id))}
+                      onClick={() => act(() => toggle(r.id))()}
                       onKeyDown={(e) => {
                         if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
                         e.preventDefault()
