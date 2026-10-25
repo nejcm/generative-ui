@@ -5,7 +5,7 @@ Generative UI Lab: local React + Hono playground comparing UI-generation approac
 ## Commands
 
 - Dev server is assumed running (`npm run dev`); do not start one.
-- Checks: `npm test` (Vitest), `npm run lint` (oxlint), `npx tsc -b --noEmit`. Don't run `npm run build` unless asked.
+- Checks: `npm test` (Vitest), `npm run lint` (oxlint), `npx tsc -b --noEmit` (covers `scripts/` via `tsconfig.scripts.json`), `npm run format:check` (oxfmt; `npm run format` writes, not yet applied repo-wide). Don't run `npm run build` unless asked.
 - `plans/` and `runs/` are gitignored scratch (design notes, saved runs).
 
 ## Layout
@@ -15,6 +15,7 @@ Generative UI Lab: local React + Hono playground comparing UI-generation approac
 - `src/catalog/`: single component catalog shared by all approaches; `validateElement` guards rendering.
 - `src/lib/`: `cost.ts`, `ndjson.ts` (`RunEvent`), `run.ts` (`RunRecord` zod schema, strict), `playback.ts` (precomputed replay frames).
 - `src/ui/`: `Pane` (runs a lane, records deltas), `History`, `Replay`, `Timeline`, `MetricsStrip`. `App.tsx` is the shell. Styles in `index.css` and `lab.css`.
+- `scripts/`: `bench.mts <batchId>` runs the CLI-model matrix headlessly against the running API (resumable; stops a provider on quota errors); `bench-stats.mts <batchId>` prints report tables. Both load `src/` via `jiti`.
 - `src/models.ts`: model list, prices, supported effort levels. `src/prompts.ts`: presets and fixtures.
 
 ## Conventions
