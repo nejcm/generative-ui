@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, BarChart3, Check, Copy, FlaskConical, History as HistoryIcon, Moon, Plug, Plus, Square, Sun, X } from 'lucide-react'
 import { approachById, approaches } from '@/approaches'
-import { getJson, whenCurrent } from '@/lib/async'
+import { DEMO, getJson, whenCurrent } from '@/lib/async'
 import { usd } from '@/lib/cost'
 import type { Run, RunSummary } from '@/lib/run'
 import type { RunRequest } from '@/lib/recorder'
@@ -86,7 +86,7 @@ export default function App() {
       document.removeEventListener('keydown', close)
     }
   }, [provOpen])
-  const [models, setModels] = useState<Model[]>()
+  const [models, setModels] = useState<Model[] | undefined>(DEMO ? [] : undefined)
   const [panes, setPanes] = useState(loadPanes)
   const [loaded, setLoaded] = useState<Record<string, Run>>({})
   const [draft, setDraft] = useState<Omit<RunRequest, 'batchId'>>({
@@ -102,6 +102,7 @@ export default function App() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    if (DEMO) return
     fetch('/api/models')
       .then((r) => r.json())
       .then(setModels)
@@ -142,6 +143,12 @@ export default function App() {
   }
 
   const openBatchId = (batchId: string) => loadBatch(batchId).then(openBatch, (e: Error) => setError(e.message))
+  const autoOpened = useRef(false)
+  useEffect(() => {
+    if (!DEMO || autoOpened.current || !recent.length) return
+    autoOpened.current = true
+    openBatchId(recent[0].batchId)
+  })
   const focusIndex = Math.max(
     0,
     panes.findIndex((p) => p.key === focusKey),
@@ -157,7 +164,7 @@ export default function App() {
     })
 
   const batches = [...new Map(recent.map((r) => [r.batchId, r])).values()].slice(0, 6)
-  const toRate = recent.filter((r) => r.rating == null && !r.metrics.aborted).length
+  const toRate = DEMO ? 0 : recent.filter((r) => r.rating == null && !r.metrics.aborted).length
 
   return (
     <div className="gul shell">
@@ -276,7 +283,14 @@ export default function App() {
                 </button>
               </div>
             </div>
-            {models?.length === 0 ? (
+            {DEMO ? (
+              <section className="panel" style={{ padding: 14 }}>
+                <h2 style={{ fontSize: 14, fontWeight: 600 }}>Static demo</h2>
+                <p className="caveat" style={{ margin: '4px 0 0' }}>
+                  Saved runs from a benchmark, replayed in the browser. Open a batch from the sidebar or History to compare approaches; nothing here calls a model. To run your own prompts, clone the repo.
+                </p>
+              </section>
+            ) : models?.length === 0 ? (
               <section className="panel" style={{ padding: 14 }}>
                 <h2 style={{ fontSize: 14, fontWeight: 600 }}>No models available</h2>
                 <p className="caveat" style={{ margin: '4px 0 8px' }}>
