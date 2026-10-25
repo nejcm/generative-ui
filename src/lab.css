@@ -172,6 +172,7 @@ body{margin:0;background:var(--frame)}
 .rate:disabled{cursor:not-allowed;opacity:.5}
 .rate:focus-visible{position:relative;z-index:1}
 .notice{display:flex;gap:8px;align-items:flex-start;padding:9px 12px;border-radius:8px;background:var(--err-soft);color:var(--err);font-size:12.5px;border:1px solid var(--err)}
+.notice.info{background:var(--signal-soft);color:var(--fg);border-color:var(--signal)}
 
 .track{position:relative;height:22px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line)}
 .r-wait{position:absolute;top:10px;height:0;border-top:2px dotted var(--fg-3)}

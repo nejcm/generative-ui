@@ -263,9 +263,14 @@ export default function App() {
           </div>
         </header>
         <main className="sheet">
+          {DEMO && (
+            <div className="notice info" role="note">
+              This is a static demo showcasing saved runs from a benchmark. It can't call models. Open a batch from the sidebar or History to compare approaches, or clone the repo to run your own prompts.
+            </div>
+          )}
           {error && (
             <div className="notice" role="alert">
-              {DEMO ? `This is a static demo showcasing saved runs; it can't call models. A saved run failed to load (${error}).` : error}
+              {error}
             </div>
           )}
           <div hidden={page !== 'lab'} className="flex flex-col gap-3.5">
@@ -283,14 +288,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-            {DEMO ? (
-              <section className="panel" style={{ padding: 14 }}>
-                <h2 style={{ fontSize: 14, fontWeight: 600 }}>Static demo</h2>
-                <p className="caveat" style={{ margin: '4px 0 0' }}>
-                  Saved runs from a benchmark, replayed in the browser. Open a batch from the sidebar or History to compare approaches; nothing here calls a model. To run your own prompts, clone the repo.
-                </p>
-              </section>
-            ) : models?.length === 0 ? (
+            {models?.length === 0 ? (
               <section className="panel" style={{ padding: 14 }}>
                 <h2 style={{ fontSize: 14, fontWeight: 600 }}>No models available</h2>
                 <p className="caveat" style={{ margin: '4px 0 8px' }}>
