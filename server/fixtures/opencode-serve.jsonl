@@ -1,10 +1,13 @@
 {"id":"evt_1","type":"server.connected","data":{}}
-{"id":"evt_2","created":1792908498922,"type":"session.execution.started","data":{"sessionID":"ses_1"},"durable":{"aggregateID":"ses_1","seq":2,"version":1}}
-{"id":"evt_3","created":1792908499735,"type":"session.step.started","data":{"sessionID":"ses_1","agent":"playground","model":{"id":"kimi-k3","providerID":"opencode-go","variant":"max"},"assistantMessageID":"msg_1","started":1792908498944},"durable":{"aggregateID":"ses_1","seq":5,"version":1}}
-{"id":"evt_4","created":1792908499800,"type":"session.text.started","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0},"durable":{"aggregateID":"ses_1","seq":6,"version":1}}
-{"id":"evt_5","created":1792908499810,"type":"session.text.delta","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0,"delta":"The keeper"}}
-{"id":"evt_6","created":1792908499830,"type":"session.text.delta","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0,"delta":" climbed the stairs."}}
-{"id":"evt_7","created":1792908499850,"type":"session.text.ended","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0,"text":"The keeper climbed the stairs."},"durable":{"aggregateID":"ses_1","seq":7,"version":1}}
-{"id":"evt_8","created":1792908499860,"type":"session.text.ended","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":1,"text":" The lamp was lit."},"durable":{"aggregateID":"ses_1","seq":8,"version":1}}
-{"id":"evt_9","created":1792908499870,"type":"session.step.ended","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","finish":"stop","cost":0,"tokens":{"input":300,"output":20,"reasoning":5,"cache":{"read":100,"write":10}}},"durable":{"aggregateID":"ses_1","seq":9,"version":1}}
-{"id":"evt_10","created":1792908499880,"type":"session.execution.succeeded","data":{"sessionID":"ses_1"},"durable":{"aggregateID":"ses_1","seq":10,"version":1}}
+{"id":"evt_2","created":1792909353516,"type":"session.created","data":{"sessionID":"ses_1"},"durable":{"aggregateID":"ses_1","seq":0,"version":1}}
+{"id":"evt_3","created":1792909353883,"type":"session.execution.started","data":{"sessionID":"ses_1"},"durable":{"aggregateID":"ses_1","seq":2,"version":1}}
+{"id":"evt_4","created":1792909354639,"type":"session.step.started","data":{"sessionID":"ses_1","agent":"playground","model":{"id":"glm-5.3-flash-free","providerID":"opencode","variant":"default"},"assistantMessageID":"msg_1","started":1792909353910},"durable":{"aggregateID":"ses_1","seq":5,"version":1}}
+{"id":"evt_5","created":1792909354700,"type":"session.text.started","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0},"durable":{"aggregateID":"ses_1","seq":6,"version":1}}
+{"id":"evt_6","created":1792909354710,"type":"session.text.delta","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0,"delta":"The keeper"}}
+{"id":"evt_7","created":1792909354720,"type":"session.text.delta","data":{"sessionID":"ses_2","assistantMessageID":"msg_2","ordinal":0,"delta":"other session"}}
+{"id":"evt_8","created":1792909354730,"type":"session.text.delta","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0,"delta":" climbed the stairs."}}
+{"id":"evt_9","created":1792909354750,"type":"session.text.ended","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0,"text":"The keeper climbed the stairs."},"durable":{"aggregateID":"ses_1","seq":7,"version":1}}
+{"id":"evt_10","created":1792909354760,"type":"session.text.ended","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":1,"text":" The lamp was lit."},"durable":{"aggregateID":"ses_1","seq":8,"version":1}}
+{"id":"evt_11","created":1792909354770,"type":"session.step.ended","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","finish":"stop","cost":0,"tokens":{"input":300,"output":20,"reasoning":5,"cache":{"read":100,"write":10}}},"durable":{"aggregateID":"ses_1","seq":9,"version":1}}
+{"id":"evt_12","created":1792909354780,"type":"session.usage.updated","data":{"sessionID":"ses_1","cost":0,"tokens":{"input":535,"output":7,"reasoning":0,"cache":{"read":0,"write":0}}}}
+{"id":"evt_13","created":1792909354790,"type":"session.execution.succeeded","data":{"sessionID":"ses_1"},"durable":{"aggregateID":"ses_1","seq":10,"version":1}}

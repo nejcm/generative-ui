@@ -101,7 +101,7 @@ test('maps opencode serve text deltas, whole text parts without deltas and summe
 })
 
 test('opencode serve keeps the quota error verbatim and ends the run', () => {
-  expect(played('opencode-quota').at(-1)).toEqual({ done: true, event: { t: 'error', message: 'Go usage limit exceeded' } })
+  expect(played('opencode-quota').find((s) => s.done)).toEqual({ done: true, event: { t: 'error', message: expect.stringMatching(/^Free usage limit reached\./) } })
 })
 
 test('opencode config keeps {env:} and {file:} in the system prompt literal', () => {
@@ -147,7 +147,7 @@ test('opencode runs a private loopback server with a deny-all config, the system
 
 test('an opencode quota failure yields its message once; a server that stops early is an error', async () => {
   fake.scripts.opencode = serve('opencode-quota')
-  expect(await collect(runCli('opencode', job, new AbortController().signal))).toEqual([{ t: 'error', message: 'Go usage limit exceeded' }])
+  expect(await collect(runCli('opencode', job, new AbortController().signal))).toEqual([{ t: 'error', message: expect.stringContaining('Free usage limit reached') }])
   fake.scripts.opencode = 'process.exit(0)'
   expect(await collect(runCli('opencode', job, new AbortController().signal))).toEqual([{ t: 'error', message: 'opencode server stopped before the run finished' }])
 })

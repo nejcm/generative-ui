@@ -176,12 +176,16 @@ export const eventMapper = (provider: 'claude-code') => mapEvent[provider]
 
 type OpencodeEvent = { type?: string; data?: any }
 
-// Bus events of `opencode serve` (v2.0.32, experimental API); payload shapes come from the binary's event schemas.
+// Bus events of `opencode serve` (v2.0.32, experimental API); text and step.ended shapes come from the binary's schemas.
 export function opencodeSession() {
   let total: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteTokens: number } | undefined
   const streamed = new Set<string>()
+  let own: string | undefined
   return {
     handle({ type, data = {} }: OpencodeEvent): { event?: RunEvent; done?: boolean } {
+      // The fresh server's first session.created is ours: the event stream opens before the session is created.
+      if (type === 'session.created') own ??= data.sessionID
+      if (!own || data.sessionID !== own) return {}
       const part = `${data.assistantMessageID}:${data.ordinal}`
       if (type === 'session.text.delta' && typeof data.delta === 'string') return streamed.add(part), { event: { t: 'delta', text: data.delta } }
       // Fallback for text that arrived without deltas.
