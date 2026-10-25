@@ -18,7 +18,9 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.87",
@@ -46,6 +48,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "oxfmt": "^0.74.0",
     "oxlint": "^1.88.0",
     "shadcn": "^4.22.1",
     "tailwindcss": "^4.3.3",
