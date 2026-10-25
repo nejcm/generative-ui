@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
 import { readNdjson, type RunEvent } from '../src/lib/ndjson.ts'
-import { cliArgs, codexSession, eventMapper, killAllClis, opencodeConfigText, probeClis, runCli, type CliProvider } from './cli.ts'
+import { cliArgs, codexSession, eventMapper, killAllClis, opencodeConfigText, opencodeSession, probeClis, runCli } from './cli.ts'
 
 // Each spawn runs a real node child that plays the given script, so pipes, exit codes and process groups are real.
 const fake = vi.hoisted(() => ({
@@ -38,7 +38,7 @@ afterEach(() => {
 const fixture = (name: string) => new URL(`./fixtures/${name}.jsonl`, import.meta.url)
 const replay = (name: string) => `process.stdout.write(require('fs').readFileSync(${JSON.stringify(fixture(name).pathname)}))`
 const lines = (name: string) => readFileSync(fixture(name), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
-const mapped = (provider: Exclude<CliProvider, 'codex'>, name: string) => lines(name).map(eventMapper(provider)).filter(Boolean)
+const mapped = (provider: 'claude-code', name: string) => lines(name).map(eventMapper(provider)).filter(Boolean)
 
 const job = { modelName: 'm', system: 'sys', prompt: 'hi' }
 const claudeAuth = (method: string, run: string) =>
@@ -85,20 +85,32 @@ test('codex session unwraps upstream errors and refuses server requests', () => 
   expect(session.handle({ method: 'turn/completed', params: { turn: { status: 'failed', error: { message: 'boom' } } } })).toEqual({ done: true, event: { t: 'error', message: 'boom' } })
   expect(JSON.parse(session.handle({ id: 9, method: 'item/commandExecution/requestApproval', params: {} }).write!)).toMatchObject({ id: 9, error: { code: -32601 } })
 })
-test('maps opencode --format json text parts and errors; usage stays absent without the final step_finish', () => {
-  expect(mapped('opencode', 'opencode-text')).toEqual([
-    { t: 'delta', text: 'I can call a tool. Let me list the files:' },
-    { t: 'delta', text: expect.stringContaining('NO TOOLS') },
-  ])
-  expect(mapped('opencode', 'opencode-error')).toEqual([{ t: 'error', message: 'Variant unavailable for opencode-go/kimi-k3: low' }])
+const played = (name: string) => {
+  const session = opencodeSession()
+  return lines(name).map((e) => session.handle(e))
+}
+
+test('maps recorded opencode serve text deltas and step usage, ignoring session-wide usage', () => {
+  const events = played('opencode-serve').flatMap((s) => (s.event ? [s.event] : []))
+  const deltas = events.filter((e) => e.t === 'delta')
+  expect(deltas).toHaveLength(51)
+  const ended = lines('opencode-serve').find((e) => e.type === 'session.text.ended')
+  expect(deltas.map((e) => e.text).join('')).toBe(ended.data.text)
+  expect(events.at(-1)).toEqual({ t: 'usage', inputTokens: 756, outputTokens: 709, cachedInputTokens: 0, cacheWriteTokens: 0 })
 })
 
-test('opencode usage sums every step once the final step_finish arrives', () => {
-  const tokens = { input: 300, output: 20, reasoning: 5, cache: { read: 100, write: 10 } }
-  const final = { type: 'step_finish', part: { reason: 'stop', tokens } }
-  expect([...lines('opencode-text'), final].map(eventMapper('opencode')).filter((e) => e?.t === 'usage')).toEqual([
-    { t: 'usage', inputTokens: 326 + 410, outputTokens: 89 + 44 + 25, cachedInputTokens: 100, cacheWriteTokens: 10 },
-  ])
+test('opencode session drops other sessions and falls back to whole text parts without deltas', () => {
+  const session = opencodeSession()
+  const part = { assistantMessageID: 'msg_1', ordinal: 0 }
+  expect(session.handle({ type: 'session.text.delta', data: { sessionID: 'ses_1', ...part, delta: 'early' } })).toEqual({})
+  session.handle({ type: 'session.created', data: { sessionID: 'ses_1' } })
+  expect(session.handle({ type: 'session.text.delta', data: { sessionID: 'ses_2', ...part, delta: 'other' } })).toEqual({})
+  expect(session.handle({ type: 'session.text.ended', data: { sessionID: 'ses_1', ...part, text: 'whole' } })).toEqual({ event: { t: 'delta', text: 'whole' } })
+  expect(session.handle({ type: 'session.execution.succeeded', data: { sessionID: 'ses_1' } })).toEqual({ done: true })
+})
+
+test('opencode serve keeps the quota error verbatim and ends the run', () => {
+  expect(played('opencode-quota').find((s) => s.done)).toEqual({ done: true, event: { t: 'error', message: expect.stringMatching(/^Free usage limit reached\./) } })
 })
 
 test('opencode config keeps {env:} and {file:} in the system prompt literal', () => {
@@ -108,18 +120,35 @@ test('opencode config keeps {env:} and {file:} in the system prompt literal', ()
   expect(JSON.parse(text).agents.playground.system).toBe(system)
 })
 
-test('opencode runs standalone with a private deny-all config, the system prompt as its agent and the effort as #variant', async () => {
-  expect(cliArgs('opencode', { ...job, modelName: 'opencode-go/kimi-k3', effort: 'max' }, '/tmp/x')).toEqual(
-    expect.arrayContaining(['run', '--standalone', '--format', 'json', '--agent', 'playground', '-m', 'opencode-go/kimi-k3#max']),
-  )
-  expect(cliArgs('opencode', { ...job, modelName: 'opencode-go/kimi-k3' }, '/tmp/x').at(-1)).toBe('opencode-go/kimi-k3')
-  const deny = [{ action: '*', resource: '*', effect: 'deny' }]
-  expect(JSON.parse(opencodeConfigText('sys'))).toMatchObject({ permissions: deny, agents: { playground: { system: 'sys', permissions: deny } }, mcp: {}, plugins: [] })
+// A stand-in `opencode serve`: Basic auth, a session, then the fixture as SSE once prompted. `check` vets each request body.
+const serve = (name: string, check = 'true') =>
+  `const lines=require('fs').readFileSync(${JSON.stringify(fixture(name).pathname)},'utf8').trim().split('\\n');let sse;
+require('http').createServer((q,r)=>{if(q.headers.authorization!=='Basic '+Buffer.from('opencode:pw').toString('base64'))return r.writeHead(401).end();
+if(q.url==='/api/event'){sse=r;r.writeHead(200,{'content-type':'text/event-stream'});return r.write(': heartbeat\\n\\n')}
+let b='';q.on('data',d=>b+=d).on('end',()=>{const body=JSON.parse(b);if(!(${check}))return r.writeHead(400).end(b);
+if(q.url==='/api/session')return r.end(JSON.stringify({data:{id:'ses_1'}}));
+r.end('{"data":{}}');for(const l of lines)sse.write('data: '+l+'\\n\\n')})}).listen(0,'127.0.0.1',function(){console.log('server listening on http://127.0.0.1:'+this.address().port);console.log('server password pw')})`
+
+test('opencode runs a private loopback server with a deny-all-but-read config, the system prompt as its agent and the effort as variant', async () => {
+  expect(cliArgs('opencode', job, '/tmp/x')).toEqual(['serve', '--hostname', '127.0.0.1', '--port', '0'])
+  const deny = [{ action: '*', resource: '*', effect: 'deny' }, { action: 'read', resource: '*', effect: 'allow' }]
+  const config = JSON.parse(opencodeConfigText('sys'))
+  expect(config).toMatchObject({ permissions: deny, agents: { playground: { system: 'sys', permissions: deny } }, mcp: {}, plugins: [] })
+  // opencode applies the last matching rule.
+  const effect = (action: string) => (config.permissions as typeof deny).findLast((r) => r.action === '*' || r.action === action)!.effect
+  expect(['read', 'external_directory', 'shell', 'edit', 'webfetch'].map(effect)).toEqual(['allow', 'deny', 'deny', 'deny', 'deny'])
   vi.stubEnv('XDG_CONFIG_HOME', '/home/u/.config')
-  fake.scripts.opencode = `const c=JSON.parse(require('fs').readFileSync(process.env.XDG_CONFIG_HOME+'/opencode/opencode.json','utf8'));if(c.agents.playground.system!=='sys'||c.permissions[0].effect!=='deny')process.exit(5);${replay('opencode-text')}`
-  const events = await collect(runCli('opencode', job, new AbortController().signal))
-  expect(events.map((e) => e.t)).toEqual(['delta', 'delta', 'done'])
-  const { opts } = lastRun()
+  fake.scripts.opencode = serve(
+    'opencode-serve',
+    `JSON.parse(require('fs').readFileSync(process.env.XDG_CONFIG_HOME+'/opencode/opencode.json','utf8')).agents.playground.system==='sys'&&(q.url==='/api/session'
+      ? body.agent==='playground'&&body.model.providerID==='opencode-go'&&body.model.id==='kimi-k3'&&body.model.variant==='max'&&JSON.stringify(body.permissions)===${JSON.stringify(JSON.stringify(deny))}
+      : q.url==='/api/session/ses_1/prompt'&&body.text==='hi')`,
+  )
+  const events = await collect(runCli('opencode', { ...job, modelName: 'opencode-go/kimi-k3', effort: 'max' }, new AbortController().signal))
+  expect(events.map((e) => e.t)).toEqual([...Array(51).fill('delta'), 'usage', 'done'])
+  expect(events.at(-1)).toMatchObject({ ttftMs: expect.any(Number) })
+  const { opts, child } = lastRun()
+  expect(child.signalCode).toBe('SIGKILL')
   expect(opts.env).toMatchObject({
     HOME: expect.stringContaining('playground-cli-'),
     XDG_CONFIG_HOME: expect.stringContaining('playground-cli-'),
@@ -129,10 +158,17 @@ test('opencode runs standalone with a private deny-all config, the system prompt
   })
 })
 
+test('an opencode quota failure yields its message once; a server that stops early is an error', async () => {
+  fake.scripts.opencode = serve('opencode-quota')
+  expect(await collect(runCli('opencode', job, new AbortController().signal))).toEqual([{ t: 'error', message: expect.stringContaining('Free usage limit reached') }])
+  fake.scripts.opencode = 'process.exit(0)'
+  expect(await collect(runCli('opencode', job, new AbortController().signal))).toEqual([{ t: 'error', message: 'opencode server stopped before the run finished' }])
+})
+
 test('opencode refuses to run while a managed config, which could re-grant tools, exists', async () => {
   const fixture = { darwin: '/Library/Application Support/opencode', win32: join(process.env.ProgramData || 'C:\\ProgramData', 'opencode') }
   managed.add(fixture[process.platform as keyof typeof fixture] ?? '/etc/opencode')
-  fake.scripts.opencode = replay('opencode-text')
+  fake.scripts.opencode = serve('opencode-serve')
   const events = await collect(runCli('opencode', job, new AbortController().signal))
   expect(events).toEqual([{ t: 'error', message: expect.stringContaining('managed config') }])
   expect(fake.calls).toEqual([])
@@ -151,7 +187,7 @@ test('on Windows the managed-config guard checks the ProgramData the child recei
   }
   managed.clear()
   vi.stubEnv('ProgramData', 'D:\\PD')
-  fake.scripts.opencode = replay('opencode-text')
+  fake.scripts.opencode = serve('opencode-serve')
   await collect(runCli('opencode', job, new AbortController().signal))
   expect(lastRun().opts.env).toHaveProperty('ProgramData', 'D:\\PD')
 })
@@ -238,9 +274,10 @@ test('abort still kills a descendant that outlives the CLI and holds its stdout'
 })
 
 test('abort also kills a descendant in its own process group, like opencode --standalone', async () => {
-  fake.scripts.opencode = `const s=require('child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});console.log(JSON.stringify({type:'text',part:{text:String(s.pid)}}));setInterval(()=>{},1000)`
+  const delta = `JSON.stringify({type:'stream_event',event:{type:'content_block_delta',delta:{type:'text_delta',text:String(s.pid)}}})`
+  fake.scripts.claude = claudeAuth('claude.ai', `const s=require('child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{detached:true,stdio:'ignore'});console.log(${delta});setInterval(()=>{},1000)`)
   const client = new AbortController()
-  const events = readNdjson(runCli('opencode', job, client.signal))
+  const events = readNdjson(runCli('claude-code', job, client.signal))
   const server = Number(((await events.next()).value as { text: string }).text)
   expect(() => process.kill(server, 0)).not.toThrow()
   client.abort()

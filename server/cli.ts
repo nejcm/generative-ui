@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
+import { Readable } from 'node:stream'
 import type { RunEvent } from '../src/lib/ndjson.ts'
 import type { Provider } from '../src/models.ts'
 
@@ -36,12 +37,13 @@ const opencodeEnv = (dir: string) => ({
   OPENCODE_DISABLE_AUTOUPDATE: '1',
 })
 
-const denyAll = [{ action: '*', resource: '*', effect: 'deny' }]
+// The OpenCode gateway rejects tool-less requests as "Free usage limit reached"; read stays inside the empty cwd since external_directory is denied.
+const readOnly = [{ action: '*', resource: '*', effect: 'deny' }, { action: 'read', resource: '*', effect: 'allow' }]
 
 const opencodeConfig = (system: string) => ({
   $schema: 'https://opencode.ai/config.json',
-  permissions: denyAll,
-  agents: { playground: { mode: 'primary', system, permissions: denyAll } },
+  permissions: readOnly,
+  agents: { playground: { mode: 'primary', system, permissions: readOnly } },
   mcp: {},
   plugins: [],
   instructions: [],
@@ -67,8 +69,8 @@ const codexOff = ['shell_tool', 'unified_exec', 'apps', 'plugins', 'hooks', 'mul
 type Job = { modelName: string; system: string; prompt: string; effort?: string; schema?: Record<string, unknown> }
 
 export function cliArgs(provider: CliProvider, { modelName, system, effort }: Job, dir: string): string[] {
-  if (provider === 'opencode')
-    return ['run', '--standalone', '--format', 'json', '--agent', 'playground', '--title', 'playground', '-m', effort ? `${modelName}#${effort}` : modelName]
+  // serve instead of run: run --format json emits each text part whole and exits before the final usage.
+  if (provider === 'opencode') return ['serve', '--hostname', '127.0.0.1', '--port', '0']
   if (provider === 'claude-code')
     return [
       '-p',
@@ -112,9 +114,7 @@ type CliEvent = {
   subtype?: string
   usage?: Record<string, number>
   item?: { type: string; text?: string }
-  part?: { text?: string; reason?: string; tokens?: { input: number; output: number; reasoning: number; cache: { read: number; write: number } } }
   message?: string
-  error?: { message: string }
 }
 
 // Codex wraps upstream errors as a JSON string.
@@ -173,24 +173,77 @@ const mapEvent: Record<'claude-code', (e: CliEvent) => RunEvent | undefined> = {
   },
 }
 
-function opencodeEvents() {
-  const total = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 }
-  return (e: CliEvent): RunEvent | undefined => {
-    // shortcut: --format json emits each text part whole, not token deltas.
-    if (e.type === 'text') return { t: 'delta', text: e.part?.text ?? '' }
-    if (e.type === 'error') return { t: 'error', message: e.error?.message ?? 'opencode failed' }
-    if (e.type !== 'step_finish' || !e.part?.tokens) return
-    const { input, output, reasoning, cache } = e.part.tokens
-    total.inputTokens += input + cache.read + cache.write
-    total.outputTokens += output + reasoning
-    total.cachedInputTokens += cache.read
-    total.cacheWriteTokens += cache.write
-    // shortcut: v2.0.32 exits before the final step_finish, so usage is usually absent rather than partial.
-    if (e.part.reason !== 'tool-calls') return { t: 'usage', ...total }
+export const eventMapper = (provider: 'claude-code') => mapEvent[provider]
+
+type OpencodeEvent = { type?: string; data?: any }
+
+// Bus events of `opencode serve` (v2.0.32, experimental API).
+export function opencodeSession() {
+  let total: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteTokens: number } | undefined
+  const streamed = new Set<string>()
+  let own: string | undefined
+  return {
+    handle({ type, data = {} }: OpencodeEvent): { event?: RunEvent; done?: boolean } {
+      // The fresh server's first session.created is ours: the event stream opens before the session is created.
+      if (type === 'session.created') own ??= data.sessionID
+      if (!own || data.sessionID !== own) return {}
+      const part = `${data.assistantMessageID}:${data.ordinal}`
+      if (type === 'session.text.delta' && typeof data.delta === 'string') return streamed.add(part), { event: { t: 'delta', text: data.delta } }
+      // Fallback for text that arrived without deltas.
+      if (type === 'session.text.ended' && !streamed.has(part) && data.text) return { event: { t: 'delta', text: String(data.text) } }
+      if (type === 'session.step.ended' && data.tokens) {
+        const { input = 0, output = 0, reasoning = 0, cache: { read = 0, write = 0 } = {} } = data.tokens
+        total ??= { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 }
+        total.inputTokens += input + read + write
+        total.outputTokens += output + reasoning
+        total.cachedInputTokens += read
+        total.cacheWriteTokens += write
+      }
+      if (type === 'session.execution.succeeded') return { done: true, event: total && { t: 'usage', ...total } }
+      if (type === 'session.execution.failed') return { done: true, event: { t: 'error', message: String(data.error?.message ?? 'opencode failed') } }
+      if (type === 'session.execution.interrupted') return { done: true, event: { t: 'error', message: `opencode run interrupted (${data.reason})` } }
+      return {}
+    },
   }
 }
 
-export const eventMapper = (provider: Exclude<CliProvider, 'codex'>) => (provider === 'opencode' ? opencodeEvents() : mapEvent[provider])
+const listening = (stdout: Readable) =>
+  new Promise<{ url: string; password: string } | undefined>((resolve) => {
+    let url: string | undefined
+    let password: string | undefined
+    createInterface({ input: stdout })
+      .on('line', (line) => {
+        url ??= /listening on (http:\/\/127\.0\.0\.1:\d+)/.exec(line)?.[1]
+        password ??= /password (\S+)/.exec(line)?.[1]
+        if (url && password) resolve({ url, password })
+      })
+      .on('close', () => resolve(undefined))
+  })
+
+// Starts a session on the private server and yields its SSE data lines; ends quietly when the server goes away.
+async function* opencodeStream(stdout: Readable, { modelName, prompt, effort }: Job, signal: AbortSignal) {
+  const server = await listening(stdout)
+  if (!server) return
+  const headers = { authorization: `Basic ${Buffer.from(`opencode:${server.password}`).toString('base64')}`, 'content-type': 'application/json' }
+  const post = async (path: string, body: unknown) => {
+    const res = await fetch(server.url + path, { method: 'POST', headers, body: JSON.stringify(body), signal })
+    if (!res.ok) throw new Error(`opencode ${path.split('/').at(-1)} failed (${res.status}): ${(await res.text()).slice(0, 500)}`)
+    return ((await res.json()) as { data: { id: string } }).data
+  }
+  const events = await fetch(`${server.url}/api/event`, { headers, signal })
+  if (!events.ok || !events.body) throw new Error(`opencode event stream failed (${events.status})`)
+  const [providerID, ...id] = modelName.split('/')
+  const session = await post('/api/session', { title: 'playground', agent: 'playground', model: { providerID, id: id.join('/'), variant: effort }, permissions: readOnly })
+  await post(`/api/session/${session.id}/prompt`, { text: prompt })
+  const body = Readable.fromWeb(events.body as never).on('error', () => {})
+  try {
+    for await (const line of createInterface({ input: body })) if (line.startsWith('data: ')) yield line.slice(6)
+  } catch {
+    // killed or aborted: runCli reports why
+  } finally {
+    body.destroy()
+  }
+}
 
 const parse = (line: string): CliEvent | undefined => {
   try {
@@ -307,20 +360,22 @@ export function runCli(provider: CliProvider, job: Job, signal: AbortSignal, tim
         timer = setTimeout(() => ((timedOut = true), p.kill()), timeoutMs)
         signal.addEventListener('abort', p.kill, { once: true })
         if (signal.aborted) p.kill()
-        const session = provider === 'codex' ? codexSession(job, join(dir, 'cwd')) : undefined
-        if (session) p.child.stdin.write(session.start)
-        else p.child.stdin.end(job.prompt)
+        const codex = provider === 'codex' ? codexSession(job, join(dir, 'cwd')) : undefined
+        const session = codex ?? (provider === 'opencode' ? opencodeSession() : undefined)
+        if (codex) p.child.stdin.write(codex.start)
+        else p.child.stdin.end(provider === 'opencode' ? '' : job.prompt)
         let stderr = ''
         p.child.stderr.on('data', (d) => (stderr = (stderr + d).slice(-1000)))
 
         let ttftMs: number | null = null
-        const map = provider === 'codex' ? undefined : eventMapper(provider)
+        const map = provider === 'claude-code' ? eventMapper(provider) : undefined
         let finished = false
-        for await (const line of createInterface({ input: p.child.stdout })) {
+        const lines = provider === 'opencode' ? opencodeStream(p.child.stdout, job, signal) : createInterface({ input: p.child.stdout })
+        for await (const line of lines) {
           const parsed = parse(line)
           let event: RunEvent | undefined
           if (session && parsed) {
-            const step = session.handle(parsed)
+            const step: { write?: string; event?: RunEvent; done?: boolean } = session.handle(parsed)
             if (step.write) p.child.stdin.write(step.write)
             event = step.event
             finished = !!step.done
@@ -332,13 +387,15 @@ export function runCli(provider: CliProvider, job: Job, signal: AbortSignal, tim
           }
           if (finished) break
         }
-        if (finished) p.kill()
+        // A server never exits on its own.
+        if (finished || provider === 'opencode') p.kill()
         const code = await p.exit
         if (failed) return
         const spawnError = p.spawnError()
         if (timedOut) send({ t: 'error', message: `${bins[provider]} timed out after ${timeoutMs / 1000}s` })
         else if (spawnError) send({ t: 'error', message: spawnError.message })
-        else if (code !== 0 && !finished) send({ t: 'error', message: stderr.trim() || `${bins[provider]} exited with code ${code}` })
+        else if ((code !== 0 || provider === 'opencode') && !finished)
+          send({ t: 'error', message: stderr.trim() || (provider === 'opencode' ? 'opencode server stopped before the run finished' : `${bins[provider]} exited with code ${code}`) })
         else send({ t: 'done', ttftMs, totalMs: performance.now() - started })
       } catch (error) {
         if (!failed) send({ t: 'error', message: error instanceof Error ? error.message : String(error) })

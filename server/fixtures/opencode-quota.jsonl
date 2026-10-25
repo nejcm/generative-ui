@@ -1,0 +1,8 @@
+{"id":"evt_1","type":"server.connected","data":{}}
+{"id":"evt_2","created":1792909353516,"type":"session.created","data":{"sessionID":"ses_1"},"durable":{"aggregateID":"ses_1","seq":0,"version":1}}
+{"id":"evt_3","created":1792909353883,"type":"session.execution.started","data":{"sessionID":"ses_1"},"durable":{"aggregateID":"ses_1","seq":2,"version":1}}
+{"id":"evt_4","created":1792909354639,"type":"session.step.started","data":{"sessionID":"ses_1","agent":"playground","model":{"id":"glm-5.3-flash-free","providerID":"opencode","variant":"default"},"assistantMessageID":"msg_1","started":1792909353910},"durable":{"aggregateID":"ses_1","seq":5,"version":1}}
+{"id":"evt_5","created":1792909354643,"type":"session.step.failed","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","error":{"type":"provider.quota","message":"Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go","status":429}},"durable":{"aggregateID":"ses_1","seq":6,"version":1}}
+{"id":"evt_6","created":1792909354645,"type":"session.execution.failed","data":{"sessionID":"ses_1","error":{"type":"provider.quota","message":"Free usage limit reached. Free models work in OpenCode (https://opencode.ai); subscribe to OpenCode Go to keep going: https://opencode.ai/go","status":429}},"durable":{"aggregateID":"ses_1","seq":7,"version":1}}
+{"id":"evt_7","created":1792909355345,"type":"session.usage.updated","data":{"sessionID":"ses_1","cost":0,"tokens":{"input":535,"output":7,"reasoning":0,"cache":{"read":0,"write":0}}}}
+{"id":"evt_8","created":1792909355347,"type":"session.renamed","data":{"sessionID":"ses_1","title":"Lighthouse keeper short story"},"durable":{"aggregateID":"ses_1","seq":9,"version":1}}
