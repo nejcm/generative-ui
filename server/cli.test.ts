@@ -90,14 +90,23 @@ const played = (name: string) => {
   return lines(name).map((e) => session.handle(e))
 }
 
-test('maps opencode serve text deltas, whole text parts without deltas and summed step usage', () => {
-  const steps = played('opencode-serve').filter((s) => s.event)
-  expect(steps).toEqual([
-    { event: { t: 'delta', text: 'The keeper' } },
-    { event: { t: 'delta', text: ' climbed the stairs.' } },
-    { event: { t: 'delta', text: ' The lamp was lit.' } },
-    { done: true, event: { t: 'usage', inputTokens: 410, outputTokens: 25, cachedInputTokens: 100, cacheWriteTokens: 10 } },
-  ])
+test('maps recorded opencode serve text deltas and step usage, ignoring session-wide usage', () => {
+  const events = played('opencode-serve').flatMap((s) => (s.event ? [s.event] : []))
+  const deltas = events.filter((e) => e.t === 'delta')
+  expect(deltas).toHaveLength(51)
+  const ended = lines('opencode-serve').find((e) => e.type === 'session.text.ended')
+  expect(deltas.map((e) => e.text).join('')).toBe(ended.data.text)
+  expect(events.at(-1)).toEqual({ t: 'usage', inputTokens: 756, outputTokens: 709, cachedInputTokens: 0, cacheWriteTokens: 0 })
+})
+
+test('opencode session drops other sessions and falls back to whole text parts without deltas', () => {
+  const session = opencodeSession()
+  const part = { assistantMessageID: 'msg_1', ordinal: 0 }
+  expect(session.handle({ type: 'session.text.delta', data: { sessionID: 'ses_1', ...part, delta: 'early' } })).toEqual({})
+  session.handle({ type: 'session.created', data: { sessionID: 'ses_1' } })
+  expect(session.handle({ type: 'session.text.delta', data: { sessionID: 'ses_2', ...part, delta: 'other' } })).toEqual({})
+  expect(session.handle({ type: 'session.text.ended', data: { sessionID: 'ses_1', ...part, text: 'whole' } })).toEqual({ event: { t: 'delta', text: 'whole' } })
+  expect(session.handle({ type: 'session.execution.succeeded', data: { sessionID: 'ses_1' } })).toEqual({ done: true })
 })
 
 test('opencode serve keeps the quota error verbatim and ends the run', () => {
@@ -120,19 +129,23 @@ let b='';q.on('data',d=>b+=d).on('end',()=>{const body=JSON.parse(b);if(!(${chec
 if(q.url==='/api/session')return r.end(JSON.stringify({data:{id:'ses_1'}}));
 r.end('{"data":{}}');for(const l of lines)sse.write('data: '+l+'\\n\\n')})}).listen(0,'127.0.0.1',function(){console.log('server listening on http://127.0.0.1:'+this.address().port);console.log('server password pw')})`
 
-test('opencode runs a private loopback server with a deny-all config, the system prompt as its agent and the effort as variant', async () => {
+test('opencode runs a private loopback server with a deny-all-but-read config, the system prompt as its agent and the effort as variant', async () => {
   expect(cliArgs('opencode', job, '/tmp/x')).toEqual(['serve', '--hostname', '127.0.0.1', '--port', '0'])
-  const deny = [{ action: '*', resource: '*', effect: 'deny' }]
-  expect(JSON.parse(opencodeConfigText('sys'))).toMatchObject({ permissions: deny, agents: { playground: { system: 'sys', permissions: deny } }, mcp: {}, plugins: [] })
+  const deny = [{ action: '*', resource: '*', effect: 'deny' }, { action: 'read', resource: '*', effect: 'allow' }]
+  const config = JSON.parse(opencodeConfigText('sys'))
+  expect(config).toMatchObject({ permissions: deny, agents: { playground: { system: 'sys', permissions: deny } }, mcp: {}, plugins: [] })
+  // opencode applies the last matching rule.
+  const effect = (action: string) => (config.permissions as typeof deny).findLast((r) => r.action === '*' || r.action === action)!.effect
+  expect(['read', 'external_directory', 'shell', 'edit', 'webfetch'].map(effect)).toEqual(['allow', 'deny', 'deny', 'deny', 'deny'])
   vi.stubEnv('XDG_CONFIG_HOME', '/home/u/.config')
   fake.scripts.opencode = serve(
     'opencode-serve',
     `JSON.parse(require('fs').readFileSync(process.env.XDG_CONFIG_HOME+'/opencode/opencode.json','utf8')).agents.playground.system==='sys'&&(q.url==='/api/session'
-      ? body.agent==='playground'&&body.model.providerID==='opencode-go'&&body.model.id==='kimi-k3'&&body.model.variant==='max'&&body.permissions[0].effect==='deny'
+      ? body.agent==='playground'&&body.model.providerID==='opencode-go'&&body.model.id==='kimi-k3'&&body.model.variant==='max'&&JSON.stringify(body.permissions)===${JSON.stringify(JSON.stringify(deny))}
       : q.url==='/api/session/ses_1/prompt'&&body.text==='hi')`,
   )
   const events = await collect(runCli('opencode', { ...job, modelName: 'opencode-go/kimi-k3', effort: 'max' }, new AbortController().signal))
-  expect(events.map((e) => e.t)).toEqual(['delta', 'delta', 'delta', 'usage', 'done'])
+  expect(events.map((e) => e.t)).toEqual([...Array(51).fill('delta'), 'usage', 'done'])
   expect(events.at(-1)).toMatchObject({ ttftMs: expect.any(Number) })
   const { opts, child } = lastRun()
   expect(child.signalCode).toBe('SIGKILL')

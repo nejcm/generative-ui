@@ -37,12 +37,13 @@ const opencodeEnv = (dir: string) => ({
   OPENCODE_DISABLE_AUTOUPDATE: '1',
 })
 
-const denyAll = [{ action: '*', resource: '*', effect: 'deny' }]
+// The OpenCode gateway rejects tool-less requests as "Free usage limit reached"; read stays inside the empty cwd since external_directory is denied.
+const readOnly = [{ action: '*', resource: '*', effect: 'deny' }, { action: 'read', resource: '*', effect: 'allow' }]
 
 const opencodeConfig = (system: string) => ({
   $schema: 'https://opencode.ai/config.json',
-  permissions: denyAll,
-  agents: { playground: { mode: 'primary', system, permissions: denyAll } },
+  permissions: readOnly,
+  agents: { playground: { mode: 'primary', system, permissions: readOnly } },
   mcp: {},
   plugins: [],
   instructions: [],
@@ -176,7 +177,7 @@ export const eventMapper = (provider: 'claude-code') => mapEvent[provider]
 
 type OpencodeEvent = { type?: string; data?: any }
 
-// Bus events of `opencode serve` (v2.0.32, experimental API); text and step.ended shapes come from the binary's schemas.
+// Bus events of `opencode serve` (v2.0.32, experimental API).
 export function opencodeSession() {
   let total: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteTokens: number } | undefined
   const streamed = new Set<string>()
@@ -232,7 +233,7 @@ async function* opencodeStream(stdout: Readable, { modelName, prompt, effort }: 
   const events = await fetch(`${server.url}/api/event`, { headers, signal })
   if (!events.ok || !events.body) throw new Error(`opencode event stream failed (${events.status})`)
   const [providerID, ...id] = modelName.split('/')
-  const session = await post('/api/session', { title: 'playground', agent: 'playground', model: { providerID, id: id.join('/'), variant: effort }, permissions: denyAll })
+  const session = await post('/api/session', { title: 'playground', agent: 'playground', model: { providerID, id: id.join('/'), variant: effort }, permissions: readOnly })
   await post(`/api/session/${session.id}/prompt`, { text: prompt })
   const body = Readable.fromWeb(events.body as never).on('error', () => {})
   try {
