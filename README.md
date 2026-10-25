@@ -21,7 +21,7 @@ Listed by `GET /api/models`, only when usable:
 - **Subscription**: local `claude` (Claude Code), `codex` and `opencode` CLIs, when on `PATH` and logged in. Spawned per run with tools off, an empty temp cwd and an env allowlist; credentials are never read by this app. Cost shows as subscription.
 - `PLAYGROUND_CLI=off` disables the CLI providers.
 
-CLI caveats: start-up adds latency (TTFT/TTFR not comparable with API runs), each harness may add its own system prompt, usage counts against the plan, and OpenCode refuses to run under managed config.
+CLI caveats: start-up adds latency (TTFT/TTFR not comparable with API runs), each harness may add its own system prompt, usage counts against the plan, and OpenCode refuses to run under managed config. OpenCode runs through a private `opencode serve` per run (loopback, random port, one-off password) and streams its experimental v2 event API, tested against v2.0.32 only; whether Go models stream per token depends on the upstream gateway.
 
 ## Run
 

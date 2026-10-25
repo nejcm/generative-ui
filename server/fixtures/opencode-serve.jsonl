@@ -1,0 +1,10 @@
+{"id":"evt_1","type":"server.connected","data":{}}
+{"id":"evt_2","created":1792908498922,"type":"session.execution.started","data":{"sessionID":"ses_1"},"durable":{"aggregateID":"ses_1","seq":2,"version":1}}
+{"id":"evt_3","created":1792908499735,"type":"session.step.started","data":{"sessionID":"ses_1","agent":"playground","model":{"id":"kimi-k3","providerID":"opencode-go","variant":"max"},"assistantMessageID":"msg_1","started":1792908498944},"durable":{"aggregateID":"ses_1","seq":5,"version":1}}
+{"id":"evt_4","created":1792908499800,"type":"session.text.started","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0},"durable":{"aggregateID":"ses_1","seq":6,"version":1}}
+{"id":"evt_5","created":1792908499810,"type":"session.text.delta","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0,"delta":"The keeper"}}
+{"id":"evt_6","created":1792908499830,"type":"session.text.delta","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0,"delta":" climbed the stairs."}}
+{"id":"evt_7","created":1792908499850,"type":"session.text.ended","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":0,"text":"The keeper climbed the stairs."},"durable":{"aggregateID":"ses_1","seq":7,"version":1}}
+{"id":"evt_8","created":1792908499860,"type":"session.text.ended","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","ordinal":1,"text":" The lamp was lit."},"durable":{"aggregateID":"ses_1","seq":8,"version":1}}
+{"id":"evt_9","created":1792908499870,"type":"session.step.ended","data":{"sessionID":"ses_1","assistantMessageID":"msg_1","finish":"stop","cost":0,"tokens":{"input":300,"output":20,"reasoning":5,"cache":{"read":100,"write":10}}},"durable":{"aggregateID":"ses_1","seq":9,"version":1}}
+{"id":"evt_10","created":1792908499880,"type":"session.execution.succeeded","data":{"sessionID":"ses_1"},"durable":{"aggregateID":"ses_1","seq":10,"version":1}}
