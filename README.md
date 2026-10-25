@@ -1,4 +1,6 @@
-# Generative UI Lab
+<p align="center"><img src="public/favicon.svg" alt="Generative UI Lab logo" width="64" height="64"></p>
+
+<h1 align="center">Generative UI Lab</h1>
 
 Local playground that races the same prompt across models and four ways of getting a model to produce UI, then compares time to first render, validity, tokens and cost.
 
