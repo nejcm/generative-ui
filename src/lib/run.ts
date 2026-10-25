@@ -8,7 +8,7 @@ export const RunRecord = z.strictObject({
   id: runId,
   createdAt: z.iso.datetime(),
   batchId: runId,
-  approach: z.enum(['json-render', 'flat-strict', 'html']),
+  approach: z.enum(['json-render', 'flat-strict', 'html', 'markup']),
   modelId: z.string(),
   settings: z.strictObject({ temperature: z.number().optional(), effort: z.string().optional() }),
   presetId: z.string().optional(),

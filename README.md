@@ -1,6 +1,6 @@
 # Generative UI Lab
 
-Local playground that races the same prompt across models and three ways of getting a model to produce UI, then compares time to first render, validity, tokens and cost.
+Local playground that races the same prompt across models and four ways of getting a model to produce UI, then compares time to first render, validity, tokens and cost.
 
 ## Approaches
 
@@ -9,8 +9,9 @@ Local playground that races the same prompt across models and three ways of gett
 | `json-render` | [json-render](https://github.com/vercel-labs/json-render) SpecStream (JSONL RFC 6902 patches) | patch by patch | prompt generated from the catalog, per-patch Zod validation |
 | `flat-strict` | strict JSON schema: flat element list with id-referenced children | partial-JSON parse | provider structured output |
 | `html` | HTML body in a sandboxed iframe (CSP applied); the page shell supplies the stylesheet and a chart helper | raw text | prompt only |
+| `markup` | nested catalog tags with quoted props | opening tag by opening tag | shared catalog validation and renderer; static props |
 
-All three render from one shared component catalog (`src/catalog`).
+All four use one shared component catalog (`src/catalog`).
 
 ## Models
 

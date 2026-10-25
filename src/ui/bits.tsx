@@ -34,6 +34,7 @@ export const captions: Record<Approach['id'], string> = {
   'json-render': 'json-render · SpecStream patches into the catalog',
   'flat-strict': 'flat element list · strict JSON into the catalog',
   html: 'HTML body · page shell supplies CSS and charts, sandboxed iframe',
+  markup: 'catalog markup · nested tags into the catalog',
 }
 export const words = ['', 'poor', 'weak', 'ok', 'good', 'great']
 

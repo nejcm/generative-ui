@@ -18,7 +18,7 @@ export type Parser = {
 }
 
 export interface Approach {
-  id: 'json-render' | 'flat-strict' | 'html'
+  id: 'json-render' | 'flat-strict' | 'html' | 'markup'
   label: string
   systemPrompt(ctx: { catalog: typeof catalog; fixture?: unknown }): string
   output: { kind: 'text' } | { kind: 'json-schema'; schema: Record<string, unknown> }
@@ -40,4 +40,5 @@ DESIGN BRIEF (applies to every UI you produce):
 - Make charts readable: a title, labelled axes or values, and a legend for pie charts.
 - Never use lorem ipsum or placeholder names like "Item 1".`
 
-export const stripFences = (text: string) => text.replace(/^\s*```[\w-]*\n?/, '').replace(/\n?```\s*$/, '')
+export const stripOpeningFence = (text: string) => text.replace(/^\s*```[\w-]*\n?/, '')
+export const stripFences = (text: string) => stripOpeningFence(text).replace(/\n?```\s*$/, '')

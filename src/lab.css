@@ -64,7 +64,7 @@ body{margin:0;background:var(--frame)}
 .tag-sig{border-color:var(--signal);color:var(--signal);background:var(--signal-soft)}
 .ap{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;font-family:var(--font-mono);font-weight:600;font-size:11px;color:var(--ap-ink);flex:none}
 .ap-lg{width:30px;height:30px;font-size:14px;border-radius:7px}
-.ap-json-render{background:var(--ap-a)}.ap-flat-strict{background:var(--ap-b)}.ap-html{background:var(--ap-c)}
+.ap-json-render{background:var(--ap-a)}.ap-flat-strict{background:var(--ap-b)}.ap-html{background:var(--ap-c)}.ap-markup{background:var(--ap-d)}
 .prompt{width:100%;min-height:68px;resize:vertical;border:1px solid var(--control);border-radius:8px;background:var(--bg);padding:10px 12px;font-size:15px;line-height:1.5;display:block;color:var(--fg)}
 .prompt:focus{border-color:var(--line-strong)}
 

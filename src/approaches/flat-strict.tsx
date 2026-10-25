@@ -1,7 +1,8 @@
 import type { Spec } from '@json-render/core'
 import { parsePartialJson } from 'ai'
 import { createsCycle, finalSpecErrors, SpecView, validateElement } from '@/catalog/catalog'
-import { componentProps, type ComponentName } from '@/catalog/schema'
+import { componentProps } from '@/catalog/schema'
+import { componentLines, decodeProp, droppableProps } from './props'
 import { designBrief, fixtureBlock, stripFences, type Approach, type ParseError, type ParseState, type Parser } from './types'
 
 // Props as {key, value} strings: a per-type props union breaks Anthropic strict-mode limits
@@ -40,14 +41,6 @@ export const flatSchema = {
 
 type FlatElement = { id?: unknown; type?: unknown; props?: unknown; children?: unknown }
 
-const tryJson = (text: string): unknown => {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
-}
-
 type Kv = { key: string; value: string }
 const isKv = (e: unknown): e is Kv => typeof (e as Kv)?.key === 'string' && typeof (e as Kv)?.value === 'string'
 
@@ -83,29 +76,10 @@ export function completedElements(text: string) {
   return commas + (lastClosed ? 1 : 0)
 }
 
-type Validator = { safeParse(v: unknown): { success: boolean } }
-// Own keys only: a prop named like an Object.prototype member (toString) must not resolve to a function.
-const validatorOf = (type: unknown, key: string): Validator | undefined => {
-  const shape: Record<string, Validator> = componentProps[type as ComponentName]?.shape ?? {}
-  return Object.hasOwn(shape, key) ? shape[key] : undefined
-}
-
 // Values are strings on the wire; use the JSON-decoded value only where the prop schema accepts it.
 function toProps(type: unknown, entries: Kv[]): Record<string, unknown> {
-  return Object.fromEntries(
-    entries.map(({ key, value }) => {
-      const decoded = tryJson(value)
-      return [key, decoded !== undefined && validatorOf(type, key)?.safeParse(decoded).success ? decoded : value]
-    }),
-  )
+  return Object.fromEntries(entries.map(({ key, value }) => [key, decodeProp(type, key, value)]))
 }
-
-// An optional prop that fails its schema costs only that prop, not the element (and its subtree).
-const droppableProps = (type: unknown, props: Record<string, unknown>) =>
-  Object.keys(props).filter((key) => {
-    const validator = validatorOf(type, key)
-    return validator && !validator.safeParse(props[key]).success && validator.safeParse(undefined).success
-  })
 
 export function flatToSpec(value: unknown, { complete, closed, final }: { complete: boolean; closed: number; final: boolean }): ParseState {
   const errors: ParseError[] = []
@@ -168,13 +142,6 @@ function createParser(): Parser {
     end: () => parse(true),
   }
 }
-
-// B has no state or events, so the catalog's "Bind …" hints ($bindState, `on`) would only produce invalid props.
-const componentLines = (prompt: string) =>
-  prompt
-    .split('\n')
-    .filter((l) => Object.keys(componentProps).some((name) => l.startsWith(`- ${name}: `)))
-    .map((l) => l.replace(/ Bind [^.]*\./g, ''))
 
 export const flatStrict: Approach = {
   id: 'flat-strict',

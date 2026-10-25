@@ -8,6 +8,7 @@ import { Choice } from './Choice'
 import { modelLabel } from './History'
 
 const approachName = (key: string) => approachById(key as Approach['id'])?.label.split(' · ')[1] ?? key
+const approachHue: Record<Approach['id'], string> = { 'json-render': 'var(--ap-a)', 'flat-strict': 'var(--ap-b)', html: 'var(--ap-c)', markup: 'var(--ap-d)' }
 const tokens = (n: number | null) => (n == null ? '–' : Math.round(n).toLocaleString('en-US'))
 const share = (n: number | null) => (n == null ? '–' : `${Math.round(n * 100)}%`)
 const MIN_RUNS = 5
@@ -134,11 +135,11 @@ function Tables({ runs }: { runs: RunSummary[] }) {
           groups={groupBy(runs, (r) => r.approach)}
           label={(k) => (
             <span className="inline-flex items-center gap-2">
-              <span className="dot" style={{ background: `var(--ap-${k === 'json-render' ? 'a' : k === 'flat-strict' ? 'b' : 'c'})` }} />
+              <span className="dot" style={{ background: approachHue[k as Approach['id']] }} />
               {approachName(k)}
             </span>
           )}
-          hue={(k) => `var(--ap-${k === 'json-render' ? 'a' : k === 'flat-strict' ? 'b' : 'c'})`}
+          hue={(k) => approachHue[k as Approach['id']]}
         />
         <GroupTable className="narrow" title="Effort" groups={groupBy(runs, (r) => r.settings.effort ?? 'default')} label={(k) => k} />
         <GroupTable title="Model" groups={groupBy(runs, (r) => r.modelId)} label={modelLabel} tps />

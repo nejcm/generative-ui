@@ -2,12 +2,13 @@ import { expect, test } from 'vitest'
 import { parseAll } from '../approaches'
 import { flatStrict } from '../approaches/flat-strict'
 import { jsonRender } from '../approaches/json-render'
+import { markup } from '../approaches/markup'
 import { presets } from '../prompts'
 import { fidelity } from './fidelity'
 
 const requires = presets.find((p) => p.id === 'login')!.requires!
 
-test('fidelity reads string props in the final A/B spec case-insensitively', async () => {
+test('fidelity reads string props in the final A/B/D spec case-insensitively', async () => {
   const elements = [
     { id: 'form', type: 'Card', props: { title: 'EMAIL' }, children: ['password', 'remember', 'submit'] },
     { id: 'password', type: 'Input', props: { label: 'Password' }, children: [] },
@@ -18,6 +19,7 @@ test('fidelity reads string props in the final A/B spec case-insensitively', asy
   const b = JSON.stringify({ root: 'form', elements: elements.map((e) => ({ ...e, props: Object.entries(e.props).map(([key, value]) => ({ key, value: JSON.stringify(value) })) })) })
   expect(fidelity(await parseAll(jsonRender, a), requires)).toBe(1)
   expect(fidelity(await parseAll(flatStrict, b), requires)).toBe(1)
+  expect(fidelity(await parseAll(markup, '<Card title="EMAIL"><Input label="Password"/><Checkbox label="Remember me"/><Button label="SIGN IN"/></Card>'), requires)).toBe(1)
 })
 
 test('fidelity excludes state, element ids, unreachable elements and hidden branches', () => {

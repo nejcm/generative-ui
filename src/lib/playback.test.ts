@@ -6,6 +6,7 @@ const outputs: Record<string, string> = {
   'json-render': '{"op":"add","path":"/root","value":"t"}\n{"op":"add","path":"/elements/t","value":{"type":"Text","props":{"text":"Hi"},"children":[]}}\n',
   'flat-strict': '{"root":"t","elements":[{"id":"t","type":"Text","props":[{"key":"text","value":"Hi"}],"children":[]}]}',
   html: '<html><body><p>Hi</p></body></html>',
+  markup: '<Text text="Hi"/>',
 }
 const chunked = (text: string): [number, string][] => (text.match(/[\s\S]{1,7}/g) ?? []).map((chunk, i) => [i * 40, chunk])
 

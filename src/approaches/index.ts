@@ -1,11 +1,12 @@
 import { flatStrict } from './flat-strict'
 import { html } from './html'
 import { jsonRender } from './json-render'
+import { markup } from './markup'
 import type { Approach } from './types'
 
 export type { Approach, ParseError, ParseState, Parser } from './types'
 
-export const approaches: Approach[] = [jsonRender, flatStrict, html]
+export const approaches: Approach[] = [jsonRender, flatStrict, html, markup]
 
 export const approachById = (id: string) => approaches.find((a) => a.id === id)
 
