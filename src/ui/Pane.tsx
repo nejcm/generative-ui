@@ -2,15 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { approachById, approaches, parseAll, type Approach, type ParseState } from '@/approaches'
 import { catalog } from '@/catalog/catalog'
 import { ChevronLeft, ChevronRight, Square } from 'lucide-react'
-import { cost, runCost, type Usage } from '@/lib/cost'
-import { coverage } from '@/lib/coverage'
-import { fidelity } from '@/lib/fidelity'
-import { sha256 } from '@/lib/hash'
-import { readNdjson, type RunEvent } from '@/lib/ndjson'
-import { whenCurrent } from '@/lib/playback'
-import { strictOutputOf, type Run } from '@/lib/run'
+import { runCost } from '@/lib/cost'
+import { whenCurrent } from '@/lib/async'
+import { record, type RunRequest } from '@/lib/recorder'
+import type { Run } from '@/lib/run'
 import { models as registry, type Model } from '@/models'
-import { fixtures, presets } from '@/prompts'
+import { fixtures } from '@/prompts'
 import { Choice } from './Choice'
 import { MetricsStrip } from './MetricsStrip'
 import { Replay } from './Replay'
@@ -24,13 +21,6 @@ export type PaneConfig = {
   modelId: string
   settings: { temperature?: number; effort?: string }
   systemOverride?: string
-}
-
-export type RunRequest = {
-  batchId: string
-  prompt: string
-  presetId?: string
-  fixtureId?: string
 }
 
 type Props = {
@@ -97,108 +87,30 @@ export function Pane(props: Props) {
     }
     const id = crypto.randomUUID()
     const createdAt = new Date().toISOString()
-    const parser = approach.createParser()
-    let state: ParseState = { renderable: false, errors: [] }
-    let rawOutput = ''
-    const deltas: [number, string][] = []
-    let ttfrMs: number | null = null
-    let usage: Usage | undefined
-    let strictOutput: boolean | null = null
-    let done: Extract<RunEvent, { t: 'done' }> | undefined
-    let failure: string | undefined
 
     setRunning(true)
     setRunKey(id)
     setReplay(undefined)
-    setResult({ approach, state })
+    setResult({ approach, state: { renderable: false, errors: [] } })
     setMetrics({})
     setShownModelId(model.id)
     setSaved(undefined)
     setNotice('')
     setRaw('')
     setGotDelta(false)
-    const started = performance.now()
-    setStartedAt(started)
-    try {
-      const res = await fetch('/api/run', {
-        method: 'POST',
-        headers: json,
-        body: JSON.stringify({
-          runId: id,
-          modelId: model.id,
-          settings,
-          system,
-          prompt: req.prompt,
-          output: approach.output,
-        }),
-        signal: controller.signal,
-      })
-      strictOutput = strictOutputOf(res.headers)
-      if (!res.ok || !res.body) throw new Error((await res.json().catch(() => null))?.error ?? `HTTP ${res.status}`)
-      for await (const event of readNdjson(res.body)) {
-        if (event.t === 'delta') {
-          rawOutput += event.text
-          if (isCurrent()) {
-            setRaw(rawOutput)
-            setGotDelta(true)
-          }
-          deltas.push([Math.round(performance.now() - started), event.text])
-          state = await parser.push(event.text)
-          if (state.renderable && ttfrMs === null) {
-            ttfrMs = performance.now() - started
-            if (isCurrent()) setMetrics({ ttfrMs })
-          }
-          if (isCurrent()) setResult({ approach, state })
-        } else if (event.t === 'usage') usage = event
-        else if (event.t === 'done') done = event
-        else failure = event.message
-      }
-    } catch (e) {
-      if (!controller.signal.aborted) failure = message(e)
-    }
-    state = await parser.end().catch((e: unknown) => ({
-      ...state,
-      errors: [...state.errors, { at: 'parser', message: message(e) }],
-    }))
-    if (state.renderable && ttfrMs === null) ttfrMs = performance.now() - started
-    const errors = failure ? [...state.errors, { at: 'transport', message: failure }] : state.errors
-    const aborted = controller.signal.aborted
-    const run: Run = {
-      id,
-      createdAt,
-      batchId: req.batchId,
-      approach: approach.id,
-      modelId: model.id,
-      settings,
-      presetId: req.presetId,
-      prompt: req.prompt,
-      fixtureId: req.fixtureId,
-      system,
-      systemHash: await sha256(system),
-      systemOverridden: config.systemOverride !== undefined,
-      strictOutput,
-      rawOutput,
-      deltas,
-      metrics: {
-        ttftMs: done?.ttftMs ?? null,
-        ttfrMs,
-        totalMs: done?.totalMs ?? performance.now() - started,
-        inputTokens: usage?.inputTokens ?? null,
-        outputTokens: usage?.outputTokens ?? null,
-        cachedInputTokens: usage?.cachedInputTokens,
-        cacheWriteTokens: usage?.cacheWriteTokens,
-        outputChars: rawOutput.length,
-        coverage: fixture === undefined ? undefined : coverage(fixture, rawOutput),
-        fidelity: fidelity(state, presets.find((p) => p.id === req.presetId)?.requires),
-        costUsd: usage ? cost(model, usage) : null,
-        valid: !aborted && errors.length === 0,
-        errorCount: errors.length,
-        errors,
-        aborted,
+    setStartedAt(performance.now())
+    const run = await record(
+      { id, createdAt, request: req, approach, model, settings, system, systemOverridden: config.systemOverride !== undefined },
+      ({ raw, state, gotDelta, ttfrMs }) => {
+        if (!isCurrent()) return
+        setRaw(raw)
+        setGotDelta(gotDelta)
+        setResult({ approach, state })
+        if (ttfrMs !== undefined) setMetrics({ ttfrMs })
       },
-    }
+      { signal: controller.signal },
+    )
     if (isCurrent()) {
-      setResult({ approach, state })
       setMetrics(run.metrics)
       setRunning(false)
     }

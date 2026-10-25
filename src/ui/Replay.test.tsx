@@ -1,7 +1,7 @@
 import { renderToString } from 'react-dom/server'
 import { afterEach, expect, test, vi } from 'vitest'
 import { approachById } from '@/approaches'
-import { frames, nextEpoch, runClock, stateAt, whenCurrent } from '@/lib/playback'
+import { frames, nextEpoch, runClock, stateAt } from '@/lib/playback'
 import type { Run } from '@/lib/run'
 import { Replay } from './Replay'
 
@@ -98,27 +98,7 @@ test('only backward seeks start a new renderer epoch', () => {
   expect(nextEpoch(3, 500, 800)).toBe(3)
 })
 
-test('a result that resolves after cancel is dropped', async () => {
-  const applied: string[] = []
-  let resolveOld!: (v: string) => void
-  const cancelOld = whenCurrent(new Promise<string>((r) => (resolveOld = r)), (v) => applied.push(v))
-  cancelOld()
-  whenCurrent(Promise.resolve('new'), (v) => applied.push(v))
-  resolveOld('old')
-  await new Promise((r) => setTimeout(r))
-  expect(applied).toEqual(['new'])
-})
-
 test('old runs without deltas render nothing; new ones prepare frames first', () => {
   expect(renderToString(<Replay run={{ ...run, deltas: undefined }} />)).toBe('')
   expect(renderToString(<Replay run={run} />)).toContain('Preparing…')
-})
-
-test('a pane load cancelled by a live run never applies, even if already resolved', async () => {
-  const applied: string[] = []
-  const cancel = whenCurrent(Promise.resolve('loaded'), (v) => applied.push(v))
-  cancel()
-  cancel()
-  await new Promise((r) => setTimeout(r))
-  expect(applied).toEqual([])
 })

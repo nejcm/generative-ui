@@ -1,6 +1,6 @@
 import { fixtures, presets } from '@/prompts'
 import { Choice } from './Choice'
-import type { RunRequest } from './Pane'
+import type { RunRequest } from '@/lib/recorder'
 
 type Draft = Omit<RunRequest, 'batchId'>
 

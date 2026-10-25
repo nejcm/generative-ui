@@ -20,28 +20,45 @@ function share(next: unknown, prev: unknown, final: unknown): unknown {
   return same ? prev : out
 }
 
-export async function frames(approach: Approach, deltas: [number, string][]): Promise<Frame[]> {
-  const final = await parseAll(approach, deltas.map((d) => d[1]).join('')).catch(() => undefined)
+const errorOf = (e: unknown): ParseError => ({ at: 'parser', message: e instanceof Error ? e.message : String(e) })
+const withErrors = (state: ParseState, errors: ParseError[]) => ({ ...state, errors: [...state.errors, ...errors] })
+
+// A parser error keeps the last state, appends the error and stops reading; shared by live runs and replay.
+export function fold(approach: Approach) {
   const parser = approach.createParser()
-  const out: Frame[] = []
   let parsed: ParseState = { renderable: false, errors: [] }
   let failure: ParseError[] = []
-  const add = (t: number, next: ParseState) => out.push({ t, state: share(next, out.at(-1)?.state, final) as ParseState })
-  // Same as Pane: a parser error keeps the last state, appends the error and stops reading.
-  const errorOf = (e: unknown): ParseError => ({ at: 'parser', message: e instanceof Error ? e.message : String(e) })
-  const withErrors = (state: ParseState, errors: ParseError[]) => ({ ...state, errors: [...state.errors, ...errors] })
-  for (const [t, text] of deltas) {
-    try {
-      parsed = await parser.push(text)
-    } catch (e) {
-      failure = [errorOf(e)]
-      add(t, withErrors(parsed, failure))
-      break
-    }
-    add(t, parsed)
+  return {
+    get failed() {
+      return failure.length > 0
+    },
+    async push(text: string): Promise<ParseState> {
+      if (failure.length) return withErrors(parsed, failure)
+      try {
+        parsed = await parser.push(text)
+      } catch (e) {
+        failure = [errorOf(e)]
+        return withErrors(parsed, failure)
+      }
+      return parsed
+    },
+    async end(): Promise<ParseState> {
+      const end = await parser.end().catch((e: unknown) => withErrors(parsed, [errorOf(e)]))
+      return withErrors(end, failure)
+    },
   }
-  const end = await parser.end().catch((e: unknown) => withErrors(parsed, [errorOf(e)]))
-  add(out.at(-1)?.t ?? 0, withErrors(end, failure))
+}
+
+export async function frames(approach: Approach, deltas: [number, string][]): Promise<Frame[]> {
+  const final = await parseAll(approach, deltas.map((d) => d[1]).join('')).catch(() => undefined)
+  const parse = fold(approach)
+  const out: Frame[] = []
+  const add = (t: number, next: ParseState) => out.push({ t, state: share(next, out.at(-1)?.state, final) as ParseState })
+  for (const [t, text] of deltas) {
+    add(t, await parse.push(text))
+    if (parse.failed) break
+  }
+  add(out.at(-1)?.t ?? 0, await parse.end())
   return out
 }
 
@@ -84,12 +101,3 @@ export function runClock(playhead: { current: number }, end: number, speed: numb
 
 // Seeking backwards bumps the epoch so renderers with their own state (SpecView's store) remount instead of keeping later state.
 export const nextEpoch = (epoch: number, from: number, to: number) => (to < from ? epoch + 1 : epoch)
-
-// Applies the result only while still current; returns the cancel for an effect cleanup.
-export function whenCurrent<T>(promise: Promise<T>, apply: (value: T) => void) {
-  let current = true
-  promise.then((value) => current && apply(value))
-  return () => {
-    current = false
-  }
-}

@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { ArrowDown, ArrowUp, BarChart3, Check, Copy, FlaskConical, History as HistoryIcon, Moon, Plug, Plus, Square, Sun, X } from 'lucide-react'
 import { approachById, approaches } from '@/approaches'
+import { getJson, whenCurrent } from '@/lib/async'
 import { usd } from '@/lib/cost'
 import type { Run, RunSummary } from '@/lib/run'
+import type { RunRequest } from '@/lib/recorder'
 import { models as registry, type Model, type Provider } from '@/models'
 import { presets } from '@/prompts'
 import { ApBadge, Indicator, live, Pips, secs, Seg, shortOf, type LaneSummary } from './ui/bits'
 import { History, loadBatch } from './ui/History'
 import { Stats } from './ui/Stats'
-import { Pane, type PaneConfig, type RunRequest } from './ui/Pane'
+import { Pane, type PaneConfig } from './ui/Pane'
 import { PromptBar } from './ui/PromptBar'
 import { Timeline } from './ui/Timeline'
 
@@ -117,12 +119,7 @@ export default function App() {
   const savedKey = Object.values(summaries)
     .map((s) => `${s.savedId}:${s.rating}`)
     .join()
-  useEffect(() => {
-    fetch('/api/runs')
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setRecent)
-      .catch(() => setRecent([]))
-  }, [savedKey, page])
+  useEffect(() => whenCurrent(getJson<RunSummary[]>('/api/runs'), setRecent, () => setRecent([])), [savedKey, page])
 
   function openBatch(runs: Run[]) {
     const configs = runs.map((run) => ({

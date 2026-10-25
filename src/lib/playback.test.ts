@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { approaches, parseAll } from '../approaches'
-import { frames } from './playback'
+import { fold, frames } from './playback'
 
 const outputs: Record<string, string> = {
   'json-render': '{"op":"add","path":"/root","value":"t"}\n{"op":"add","path":"/elements/t","value":{"type":"Text","props":{"text":"Hi"},"children":[]}}\n',
@@ -49,6 +49,15 @@ test('a parser error on push keeps the last state, appends the error and stops',
     { t: 10, state: { html: '<p>hi', renderable: true, errors: [boom] } },
     { t: 10, state: { html: '<p>hi', renderable: true, errors: [boom] } },
   ])
+})
+
+test('fold keeps the first push state after a throw on the second and ignores later pushes', async () => {
+  const parse = fold(failing('push'))
+  await parse.push('<p>hi')
+  await parse.push('</p>')
+  expect(parse.failed).toBe(true)
+  await parse.push('<p>more</p>')
+  expect(await parse.end()).toEqual({ html: '<p>hi', renderable: true, errors: [boom] })
 })
 
 test('unchanged state is shared between frames, not copied', async () => {
