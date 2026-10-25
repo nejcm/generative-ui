@@ -85,6 +85,15 @@ const opencodeGo = (name: string, label: string, effort: string[]): Model => ({
   supports: { strictJson: false, effort, temperature: false },
 })
 
+// Free tier of the `opencode` provider: no quota to exhaust, but rate-limited and prompts may be retained by the host.
+const opencodeFree = (name: string, label: string, effort: string[]): Model => ({
+  id: `${name.replace(/-free$/, '')}-opencode-free`,
+  provider: 'opencode',
+  modelName: `opencode/${name}`,
+  label: `${label} · OpenCode Free`,
+  supports: { strictJson: false, effort, temperature: false },
+})
+
 // claude --json-schema lets the model skip its StructuredOutput tool, so it is prompt-only; codex --output-schema constrains.
 export const models: Model[] = [
   ...apiModels,
@@ -96,4 +105,9 @@ export const models: Model[] = [
   opencodeGo('minimax-m3', 'MiniMax M3', []),
   opencodeGo('qwen3.8-max', 'Qwen3.8 Max', ['low', 'medium']),
   opencodeGo('qwen3.8-flash', 'Qwen3.8 Flash', ['low', 'medium']),
+  opencodeFree('deepseek-v4.1-flash-free', 'DeepSeek V4.1 Flash', ['low', 'high', 'max']),
+  opencodeFree('glm-5.3-flash-free', 'GLM-5.3 Flash', ['low', 'high', 'max']),
+  opencodeFree('mimo-v2.6-flash-free', 'MiMo V2.6 Flash', []),
+  opencodeFree('nemotron-3-ultra-free', 'Nemotron 3 Ultra', []),
+  opencodeFree('big-pickle', 'Big Pickle', []),
 ]
