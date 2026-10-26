@@ -75,7 +75,7 @@ src/prompts.ts presets and fixtures
 ## More
 
 - [docs/instructions.md](docs/instructions.md): full usage guide
-- [reports/benchmark-report.2026-10-25.md](reports/benchmark-report.2026-10-25.md): benchmark results across models and approaches
+- [reports/benchmark-report.2026-10-27.md](reports/benchmark-report.2026-10-25.md): benchmark results across models and approaches
 - [AGENTS.md](AGENTS.md): layout and conventions for contributors and coding agents
 
 ## License

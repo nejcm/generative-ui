@@ -26,7 +26,7 @@ const p90 = (rs: any[]) => {
 }
 const model = (r: any) => r.modelId.replace('-subscription', '').replace('-opencode-go', '')
 const effort = (r: any) => r.settings.effort ?? 'none'
-const provider = (r: any) => (r.modelId.endsWith('opencode-go') ? 'opencode-go' : r.modelId.startsWith('claude') ? 'claude-code' : 'codex')
+const provider = (r: any) => (r.modelId.endsWith('opencode-go') ? 'opencode-go' : (r.modelId.startsWith('claude') ? 'anthropic' : 'openai') + (r.modelId.endsWith('-subscription') ? ' (cli)' : ' (api)'))
 
 function table(title: string, keyOf: (r: any) => string) {
   const byKey = new Map<string, any[]>()
