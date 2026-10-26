@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, BarChart3, Check, Copy, FlaskConical, History as Hi
 import { approachById, approaches } from '@/approaches'
 import { DEMO, getJson, whenCurrent } from '@/lib/async'
 import { usd } from '@/lib/cost'
+import { pageFromPath, type Page } from '@/lib/page'
 import type { Run, RunSummary } from '@/lib/run'
 import type { RunRequest } from '@/lib/recorder'
 import { models as registry, type Model, type Provider } from '@/models'
@@ -22,7 +23,6 @@ const newPane = (approach: PaneConfig['approach']): PaneConfig => ({
   // Benchmark: high effort bought latency, not validity. Pane ignores it for models without a "low" level.
   settings: { effort: 'low' },
 })
-type Page = 'lab' | 'history' | 'stats'
 const pageTitle: Record<Page, string> = {
   lab: 'Lab',
   history: 'History',
@@ -71,7 +71,19 @@ function toggleTheme(dark: boolean) {
 }
 
 export default function App() {
-  const [page, setPage] = useState<Page>('lab')
+  const [page, setPage] = useState(() => pageFromPath(location.pathname, import.meta.env.BASE_URL))
+  useEffect(() => {
+    const onPopState = () => setPage(pageFromPath(location.pathname, import.meta.env.BASE_URL))
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  function navigate(next: Page) {
+    const path = `${import.meta.env.BASE_URL}${next === 'lab' ? '' : next}`
+    if (location.pathname !== path) window.history.pushState(null, '', `${path}${location.search}${location.hash}`)
+    setPage(next)
+  }
+
   const [dark, setDark] = useState(() => document.documentElement.dataset.theme === 'dark')
   const [provOpen, setProvOpen] = useState(false)
   useEffect(() => {
@@ -122,7 +134,7 @@ export default function App() {
     .join()
   useEffect(() => whenCurrent(getJson<RunSummary[]>('/api/runs'), setRecent, () => setRecent([])), [savedKey, page])
 
-  function openBatch(runs: Run[]) {
+  function openBatch(runs: Run[], showLab = true) {
     const configs = runs.map((run) => ({
       key: crypto.randomUUID(),
       approach: run.approach,
@@ -139,7 +151,7 @@ export default function App() {
       fixtureId: runs[0].fixtureId,
     })
     setFocusKey(next[0].key)
-    setPage('lab')
+    if (showLab) navigate('lab')
   }
 
   const openBatchId = (batchId: string) => loadBatch(batchId).then(openBatch, (e: Error) => setError(e.message))
@@ -147,7 +159,7 @@ export default function App() {
   useEffect(() => {
     if (!DEMO || autoOpened.current || !recent.length) return
     autoOpened.current = true
-    openBatchId(recent[0].batchId)
+    loadBatch(recent[0].batchId).then((runs) => openBatch(runs, false), (e: Error) => setError(e.message))
   })
   const focusIndex = Math.max(
     0,
@@ -190,7 +202,7 @@ export default function App() {
               ['stats', BarChart3, null],
             ] as const
           ).map(([id, Icon, count]) => (
-            <button key={id} type="button" className={page === id ? 'on' : undefined} aria-current={page === id ? 'page' : undefined} onClick={() => setPage(id)}>
+            <button key={id} type="button" className={page === id ? 'on' : undefined} aria-current={page === id ? 'page' : undefined} onClick={() => navigate(id)}>
               <Icon size={16} />
               {pageTitle[id]}
               {count && <span className="cnt">{count}</span>}
@@ -258,7 +270,7 @@ export default function App() {
                 { value: 'history', label: pageTitle.history },
                 { value: 'stats', label: pageTitle.stats },
               ]}
-              onChange={setPage}
+              onChange={navigate}
             />
           </div>
         </header>
