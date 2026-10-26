@@ -1,5 +1,6 @@
 // Headless benchmark: runs the model × effort × approach × preset matrix against a running dev API and saves each run via POST /api/runs.
-// Usage: node scripts/bench.mts <batchId> [--repeats N] [--presets a,b] [--provider claude-code|codex|opencode] [--match substring] [--limit N]
+// Usage: node scripts/bench.mts <batchId> [--repeats N] [--presets a,b] [--provider p] [--match substring] [--limit N] [--api] [--concurrency N] [--delay-ms N]
+// --api runs the fixed API-billed matrix (anthropic, openai, opencode-go) instead of the CLI models.
 // Needs jiti (transitive dependency) to load the app's TS modules with the `@` alias.
 import { createJiti } from 'jiti'
 
@@ -11,7 +12,6 @@ const [{ record }, { approaches }, { catalog }, { models }, { fixtures, presets 
 )
 
 const API = 'http://127.0.0.1:8787'
-const CONCURRENCY = 3
 const QUOTA = /usage limit|quota|rate limit/i
 
 const args = process.argv.slice(2)
@@ -20,7 +20,20 @@ const flag = (name: string) => args[args.indexOf(`--${name}`) + 1]
 const has = (name: string) => args.includes(`--${name}`)
 if (!batchId || batchId.startsWith('--')) throw new Error('usage: node scripts/bench.mts <batchId> [--repeats N] [--presets a,b] [--provider p] [--match s] [--limit N]')
 const repeats = Number(has('repeats') ? flag('repeats') : 1)
-const presetIds = (has('presets') ? flag('presets') : 'login,dashboard,comparison').split(',')
+const presetIds = (has('presets') ? flag('presets') : has('api') ? presets.map((p: any) => p.id).join(',') : 'login,dashboard,comparison').split(',')
+const concurrency = has('concurrency') ? Number(flag('concurrency')) : 3
+const delayMs = has('delay-ms') ? Number(flag('delay-ms')) : 0
+const API_MATRIX: Record<string, (string | undefined)[]> = {
+  'claude-haiku-5-5': ['low', 'medium'],
+  'claude-sonnet-5-5': ['low', 'medium'],
+  'claude-opus-5-5': ['low'],
+  'gpt-6-luna': ['low', 'medium', 'high'],
+  'gpt-6.1-sol': ['low'],
+  'qwen3.8-flash-opencode-go': ['low'],
+  'glm-5.3-flash-opencode-go': ['high'],
+  'deepseek-v4.1-flash-opencode-go': ['high'],
+  'minimax-m3-opencode-go': [undefined],
+}
 
 const transport = async (body: unknown, signal: AbortSignal) => {
   const res = await fetch(`${API}/api/run`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal })
@@ -44,10 +57,10 @@ for (const r of existing) {
   have.set(key, (have.get(key) ?? 0) + 1)
 }
 
-const cliModels = models.filter((m: any) => ['claude-code', 'codex', 'opencode'].includes(m.provider) && (!has('provider') || m.provider === flag('provider')) && (!has('match') || m.id.includes(flag('match'))))
+const cliModels = models.filter((m: any) => (has('api') ? m.id in API_MATRIX : ['claude-code', 'codex', 'opencode'].includes(m.provider)) && (!has('provider') || m.provider === flag('provider')) && (!has('match') || m.id.includes(flag('match'))))
 let queue: any[] = []
 for (const model of cliModels)
-  for (const effort of effortsOf(model))
+  for (const effort of has('api') ? API_MATRIX[model.id] : effortsOf(model))
     for (const approach of approaches)
       for (const presetId of presetIds) {
         const missing = repeats - (have.get(cell(model.id, effort, approach.id, presetId)) ?? 0)
@@ -71,6 +84,7 @@ let skipped = 0
 async function worker() {
   for (let job; (job = queue.pop()); ) {
     const { model, effort, approach, preset } = job
+    if (delayMs) await new Promise((r) => setTimeout(r, delayMs))
     if (exhausted.has(planOf(model))) {
       skipped++
       continue
@@ -104,5 +118,5 @@ async function worker() {
     console.log(`[${done}] ${model.id} ${effort ?? '-'} ${approach.id} ${preset.id} ${(run.metrics.totalMs / 1000).toFixed(1)}s valid=${run.metrics.valid} ${run.metrics.errors[0]?.message.slice(0, 90) ?? ''}`)
   }
 }
-await Promise.all(Array.from({ length: CONCURRENCY }, worker))
+await Promise.all(Array.from({ length: concurrency }, worker))
 console.log(`finished: ${done} saved, ${invalid} invalid, ${skipped} skipped for exhausted providers (${[...exhausted].join(', ') || 'none'})`)
