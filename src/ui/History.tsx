@@ -11,20 +11,19 @@ import { Choice } from './Choice'
 import { Replay } from './Replay'
 import { Result, stripOf } from './Result'
 
+// Oldest first; the Lab has room for the latest four.
+const loadRuns = (runs: RunSummary[]) => Promise.all(runs.slice(-4).map((r) => getJson<Run>(`/api/runs/${r.id}`)))
+
 export async function loadBatch(batchId: string) {
   const batch = await getJson<RunSummary[]>(`/api/runs?batchId=${encodeURIComponent(batchId)}`)
-  return Promise.all(
-    batch
-      .slice(0, 4)
-      .reverse()
-      .map((r) => getJson<Run>(`/api/runs/${r.id}`)),
-  )
+  return loadRuns(batch.reverse())
 }
 
 const tokens = (n?: number | null) => n?.toLocaleString('en-US') ?? '–'
 const rate = (v: number | null) => (v == null ? '–' : String(Math.round(v)))
 const presetLabel = (id?: string) => presets.find((p) => p.id === id)?.label ?? 'Custom'
 export const modelLabel = (id: string) => models.find((m) => m.id === id)?.label ?? id
+const configOf = (r: RunSummary) => `${presetLabel(r.presetId)} · ${modelLabel(r.modelId)} · ${r.settings.effort ?? 'default'}`
 
 export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void }) {
   const [presetId, setPresetId] = useState('')
@@ -67,8 +66,8 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
       r.metrics.costUsd,
     )
   const act = (fn: () => Promise<void>) => () => fn().catch((e: Error) => setError(e.message))
-  const openBatch = (batchId: string) => act(async () => onOpenBatch(await loadBatch(batchId)))
-  const batches = [...new Set(runs?.map((r) => r.batchId))].map((id) => runs!.filter((r) => r.batchId === id).reverse())
+  const openGroup = (group: RunSummary[]) => act(async () => onOpenBatch(await loadRuns(group)))
+  const groups = [...new Set(runs?.map(configOf))].map((config) => [config, runs!.filter((r) => configOf(r) === config).reverse()] as const)
 
   const sel = selected?.run
   const selStatus = sel ? statusOf(false, true, selected.state.renderable, sel.metrics) : 'idle'
@@ -77,7 +76,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
       <div className="page-h">
         <div>
           <h1>History</h1>
-          <p>{runs ? `${runs.length} saved runs in ${batches.length} batches. Select a run to see its output, metrics and replay.` : 'Loading saved runs…'}</p>
+          <p>{runs ? `${runs.length} saved runs in ${groups.length} groups. Select a run to see its output, metrics and replay.` : 'Loading saved runs…'}</p>
         </div>
         <div className="acts w-64">
           <Choice label="Preset filter" value={presetId} options={[{ value: '', label: 'All presets' }, ...presets.map((p) => ({ value: p.id, label: p.label }))]} onChange={setPresetId} />
@@ -92,9 +91,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
               <th>Preset</th>
               <th>Approach</th>
               <th>Model</th>
-              <th className="num">TTFR</th>
-              <th className="num">First token</th>
-              <th className="num">Total</th>
+              <th className="num" title="Time to first render / first token / total">TTFR / TTFT / Total</th>
               <th className="num">Out tok</th>
               <th className="num">Writing tok/s</th>
               <th className="num">Cost</th>
@@ -103,18 +100,18 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
             </tr>
           </thead>
           <tbody>
-            {batches.map((group) => (
-              <Fragment key={group[0].batchId}>
+            {groups.map(([config, group]) => (
+              <Fragment key={config}>
                 <tr className="batch">
-                  <td colSpan={12}>
+                  <td colSpan={10}>
                     <div className="flex items-center gap-3">
                       <span>
-                        {group.every((r) => r.presetId === group[0].presetId) ? `${presetLabel(group[0].presetId)} · ` : ''}{group.length} {group.length === 1 ? 'run' : 'runs'}
+                        {config} · {group.length} {group.length === 1 ? 'run' : 'runs'}
                       </span>
                       <span className="muted" style={{ fontWeight: 400 }}>
                         {new Date(group[0].createdAt).toLocaleString()} · {batchUsd(group.map(costOf))}
                       </span>
-                      <button type="button" className="btn btn-sm ml-auto" onClick={openBatch(group[0].batchId)}>
+                      <button type="button" className="btn btn-sm ml-auto" onClick={openGroup(group)}>
                         Open in Lab
                       </button>
                     </div>
@@ -142,9 +139,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
                         </span>
                       </td>
                       <td>{modelLabel(r.modelId)}</td>
-                      <td className="num">{secs(r.metrics.ttfrMs)}</td>
-                      <td className="num">{secs(r.metrics.ttftMs)}</td>
-                      <td className="num">{secs(r.metrics.totalMs)}</td>
+                      <td className="num">{secs(r.metrics.ttfrMs)} / {secs(r.metrics.ttftMs)} / {secs(r.metrics.totalMs)}</td>
                       <td className="num">{tokens(r.metrics.outputTokens)}</td>
                       <td className="num">{rate(writingTokensPerSec(r.metrics))}</td>
                       <td className="num">{usd(costOf(r))}</td>
@@ -155,7 +150,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
                     </tr>
                     {sel?.id === r.id && selected && (
                       <tr className="det">
-                        <td colSpan={12}>
+                        <td colSpan={10}>
                           <div className="hdet">
                             <div className="hinfo">
                               <div className="flex items-center gap-2">
@@ -201,8 +196,8 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
                                 <span className="muted">{sel.rating ? words[sel.rating] : 'Not rated'}</span>
                               </div>
                               {sel.notes && <p className="caveat">{sel.notes}</p>}
-                              <button type="button" className="btn self-start" onClick={openBatch(sel.batchId)}>
-                                Open batch in Lab
+                              <button type="button" className="btn self-start" onClick={openGroup(groups.find(([config]) => config === configOf(sel))![1])}>
+                                Open group in Lab
                               </button>
                             </div>
                             <div className="min-w-0">

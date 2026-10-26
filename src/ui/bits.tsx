@@ -27,7 +27,7 @@ export function statusOf(running: boolean, gotDelta: boolean, renderable: boolea
   return m.ttfrMs == null || m.errors?.some((e) => e.at === 'transport') ? 'failed' : 'done'
 }
 
-export const secs = (ms: number | null | undefined) => (ms == null ? '–' : `${(ms / 1000).toFixed(2)} s`)
+export const secs = (ms: number | null | undefined) => (ms == null ? '–' : `${(ms / 1000).toFixed(2)}s`)
 export const letterOf = (a: Approach) => a.label[0]
 export const shortOf = (a: Approach) => a.label.split(' · ')[1] ?? a.label
 export const captions: Record<Approach['id'], string> = {
