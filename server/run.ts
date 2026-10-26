@@ -65,7 +65,7 @@ export async function run(c: Context) {
       const phases: Phases = { startupMs: 0 }
       try {
         for await (const part of result.fullStream) {
-          if (part.type !== 'start') phases.firstByteMs ??= performance.now() - started
+          if (part.type === 'start-step') phases.firstByteMs ??= performance.now() - started
           if (part.type === 'reasoning-delta') phases.firstReasoningMs ??= performance.now() - started
           if (part.type === 'text-delta') {
             ttftMs ??= performance.now() - started

@@ -96,7 +96,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
               <th className="num">First token</th>
               <th className="num">Total</th>
               <th className="num">Out tok</th>
-              <th className="num">tok/s</th>
+              <th className="num">Writing tok/s</th>
               <th className="num">Cost</th>
               <th className="num">Errors</th>
               <th>Rating</th>

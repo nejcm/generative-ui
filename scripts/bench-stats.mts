@@ -51,7 +51,7 @@ table('By preset', (r) => r.presetId)
 table('Model × approach', (r) => `${model(r)} · ${r.approach}`)
 const effortSets = new Map(Object.entries(Object.groupBy(runs, model)).map(([m, rs]) => [m, [...new Set(rs!.map(effort))].sort().join(',')]))
 const counts = Object.groupBy(effortSets.values(), (set) => set)
-const common = Object.keys(counts).sort((a, b) => counts[b]!.length - counts[a]!.length)[0]
+const common = Object.keys(counts).sort((a, b) => counts[b]!.length - counts[a]!.length || a.localeCompare(b))[0]
 const odd = new Map([...effortSets].filter(([, set]) => set !== common))
 table('Model × effort', (r) => `${model(r)} · ${effort(r)}${odd.has(model(r)) ? ' †' : ''}`)
 if (odd.size) console.log(`\n† effort set differs from the most common (${common}): ${[...odd].map(([m, set]) => `${m} ${set}`).join('; ')}. Compare those models at matched effort only.`)
