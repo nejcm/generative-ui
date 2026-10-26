@@ -67,6 +67,11 @@ test('happy path records metrics, cost, ttfr and valid', async () => {
   expect(progress.at(-1)).toEqual({ raw: '<p>hi</p>', state: { html: '<p>hi</p>', renderable: true, errors: [] }, gotDelta: true, ttfrMs: 10 })
 })
 
+test('phases from done and reasoning tokens from usage are recorded', async () => {
+  const result = await run([[10, delta('<p>hi</p>')], [20, { ...usage, reasoningTokens: 50 }], [30, { ...done, startupMs: 1, firstByteMs: 2, firstReasoningMs: 3 }]])
+  expect(result.metrics).toMatchObject({ startupMs: 1, firstByteMs: 2, firstReasoningMs: 3, reasoningTokens: 50, outputTokens: 500 })
+})
+
 test('raw progress arrives before a slow parse resolves', async () => {
   let resolve: (state: ParseState) => void = () => {}
   const slow = { ...html, createParser: () => ({ ...html.createParser(), push: () => new Promise<ParseState>((r) => (resolve = r)) }) }

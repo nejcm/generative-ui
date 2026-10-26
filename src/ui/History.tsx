@@ -3,6 +3,7 @@ import { approachById, parseAll, type Approach, type ParseState } from '@/approa
 import { getJson, whenCurrent } from '@/lib/async'
 import { batchUsd, runCost, usd } from '@/lib/cost'
 import type { Run, RunSummary } from '@/lib/run'
+import { thinkingMs, writingMs, writingTokensPerSec } from '@/lib/stats'
 import { models } from '@/models'
 import { presets } from '@/prompts'
 import { ApBadge, Collapsible, Errors, Pips, secs, statusOf, words } from './bits'
@@ -20,6 +21,8 @@ export async function loadBatch(batchId: string) {
   )
 }
 
+const tokens = (n?: number | null) => n?.toLocaleString('en-US') ?? '–'
+const rate = (v: number | null) => (v == null ? '–' : String(Math.round(v)))
 const presetLabel = (id?: string) => presets.find((p) => p.id === id)?.label ?? 'Custom'
 export const modelLabel = (id: string) => models.find((m) => m.id === id)?.label ?? id
 
@@ -90,6 +93,10 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
               <th>Approach</th>
               <th>Model</th>
               <th className="num">TTFR</th>
+              <th className="num">First token</th>
+              <th className="num">Total</th>
+              <th className="num">Out tok</th>
+              <th className="num">tok/s</th>
               <th className="num">Cost</th>
               <th className="num">Errors</th>
               <th>Rating</th>
@@ -99,7 +106,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
             {batches.map((group) => (
               <Fragment key={group[0].batchId}>
                 <tr className="batch">
-                  <td colSpan={8}>
+                  <td colSpan={12}>
                     <div className="flex items-center gap-3">
                       <span>
                         {group.every((r) => r.presetId === group[0].presetId) ? `${presetLabel(group[0].presetId)} · ` : ''}{group.length} {group.length === 1 ? 'run' : 'runs'}
@@ -136,6 +143,10 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
                       </td>
                       <td>{modelLabel(r.modelId)}</td>
                       <td className="num">{secs(r.metrics.ttfrMs)}</td>
+                      <td className="num">{secs(r.metrics.ttftMs)}</td>
+                      <td className="num">{secs(r.metrics.totalMs)}</td>
+                      <td className="num">{tokens(r.metrics.outputTokens)}</td>
+                      <td className="num">{rate(writingTokensPerSec(r.metrics))}</td>
                       <td className="num">{usd(costOf(r))}</td>
                       <td className={`num${r.metrics.errorCount ? ' v-bad' : ''}`}>{r.metrics.aborted ? 'stopped' : r.metrics.errorCount}</td>
                       <td>
@@ -144,7 +155,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
                     </tr>
                     {sel?.id === r.id && selected && (
                       <tr className="det">
-                        <td colSpan={8}>
+                        <td colSpan={12}>
                           <div className="hdet">
                             <div className="hinfo">
                               <div className="flex items-center gap-2">
@@ -161,9 +172,15 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
                                 {(
                                   [
                                     ['TTFR', secs(sel.metrics.ttfrMs)],
-                                    ['First token', secs(sel.metrics.ttftMs)],
                                     ['Total', secs(sel.metrics.totalMs)],
-                                    ['Tokens out', sel.metrics.outputTokens?.toLocaleString('en-US') ?? '–'],
+                                    ['Startup', secs(sel.metrics.startupMs)],
+                                    ['First byte', secs(sel.metrics.firstByteMs)],
+                                    ['Thinking', secs(thinkingMs(sel.metrics))],
+                                    ['First token', secs(sel.metrics.ttftMs)],
+                                    ['Writing', secs(writingMs(sel.metrics))],
+                                    ['Writing tok/s', rate(writingTokensPerSec(sel.metrics))],
+                                    ['Tokens out', tokens(sel.metrics.outputTokens)],
+                                    ['Reasoning tokens', tokens(sel.metrics.reasoningTokens)],
                                     ['Cost', usd(costOf(sel))],
                                     ['Valid', sel.metrics.valid ? 'valid' : 'invalid'],
                                   ] as const

@@ -25,11 +25,16 @@ export const RunRecord = z.strictObject({
     ttftMs: z.number().nullable(),
     ttfrMs: z.number().nullable(),
     totalMs: z.number(),
+    startupMs: z.number().optional(),
+    firstByteMs: z.number().optional(),
+    firstReasoningMs: z.number().optional(),
     // null: no usage reported (aborted stream), not zero spend.
     inputTokens: z.number().nullable(),
     outputTokens: z.number().nullable(),
     cachedInputTokens: z.number().int().min(0).optional(),
     cacheWriteTokens: z.number().int().min(0).optional(),
+    // Included in outputTokens.
+    reasoningTokens: z.number().int().min(0).optional(),
     outputChars: z.number().int().min(0).optional(),
     coverage: z.number().min(0).max(1).optional(),
     fidelity: z.number().min(0).max(1).optional(),
