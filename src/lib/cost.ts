@@ -1,6 +1,6 @@
 import type { Model, Plan } from '../models.ts'
 
-export type Usage = { inputTokens: number; outputTokens: number; cachedInputTokens?: number; cacheWriteTokens?: number }
+export type Usage = { inputTokens: number; outputTokens: number; cachedInputTokens?: number; cacheWriteTokens?: number; reasoningTokens?: number }
 
 export type Cost = number | null | Plan
 

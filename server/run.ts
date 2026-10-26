@@ -3,7 +3,7 @@ import { openai } from '@ai-sdk/openai'
 import { Output, jsonSchema, streamText, type JSONSchema7, type LanguageModel } from 'ai'
 import type { Context } from 'hono'
 import { z } from 'zod'
-import type { RunEvent } from '../src/lib/ndjson.ts'
+import type { Phases, RunEvent } from '../src/lib/ndjson.ts'
 import { models, type Provider } from '../src/models.ts'
 import { isCli, runCli, type CliProvider } from './cli.ts'
 
@@ -62,8 +62,11 @@ export async function run(c: Context) {
     async start(controller) {
       const send = (event: RunEvent) => controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'))
       let ttftMs: number | null = null
+      const phases: Phases = { startupMs: 0 }
       try {
         for await (const part of result.fullStream) {
+          if (part.type === 'start-step') phases.firstByteMs ??= performance.now() - started
+          if (part.type === 'reasoning-delta') phases.firstReasoningMs ??= performance.now() - started
           if (part.type === 'text-delta') {
             ttftMs ??= performance.now() - started
             send({ t: 'delta', text: part.text })
@@ -77,11 +80,12 @@ export async function run(c: Context) {
               outputTokens: usage.outputTokens ?? 0,
               cachedInputTokens: usage.inputTokenDetails.cacheReadTokens,
               cacheWriteTokens: usage.inputTokenDetails.cacheWriteTokens,
+              reasoningTokens: usage.outputTokenDetails.reasoningTokens,
             })
           }
         }
         if (signal.aborted) return
-        send({ t: 'done', ttftMs, totalMs: performance.now() - started })
+        send({ t: 'done', ttftMs, totalMs: performance.now() - started, ...phases })
       } catch (error) {
         if (signal.aborted) return
         send({ t: 'error', message: errorMessage(error) })

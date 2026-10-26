@@ -5,7 +5,7 @@ import { homedir, tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { Readable } from 'node:stream'
-import type { RunEvent } from '../src/lib/ndjson.ts'
+import type { Phases, RunEvent } from '../src/lib/ndjson.ts'
 import type { Provider } from '../src/models.ts'
 
 export type CliProvider = Extract<Provider, 'claude-code' | 'codex' | 'opencode'>
@@ -126,23 +126,27 @@ const unwrap = (message: string) => {
   }
 }
 
+type Step = { write?: string; event?: RunEvent; done?: boolean; mark?: keyof Phases }
+
 type CodexMessage = { id?: number; method?: string; params?: any; result?: any; error?: { message: string } }
 
 // Drives `codex app-server` (JSON-RPC lines over stdio): initialize, thread/start, turn/start, then deltas until turn/completed.
 export function codexSession({ modelName, prompt, effort, schema }: Job, cwd: string) {
   let nextId = 0
   const request = (method: string, params: unknown) => JSON.stringify({ id: ++nextId, method, params }) + '\n'
-  let last: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteInputTokens: number } | undefined
+  let last: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteInputTokens: number; reasoningOutputTokens: number } | undefined
   const fail = (message: string) => ({ event: { t: 'error', message: unwrap(message) } as RunEvent })
   return {
     start: request('initialize', { clientInfo: { name: 'playground', title: null, version: '0' }, capabilities: null }),
-    handle(m: CodexMessage): { write?: string; event?: RunEvent; done?: boolean } {
+    handle(m: CodexMessage): Step {
       if (m.id !== undefined && m.method) return { write: JSON.stringify({ id: m.id, error: { code: -32601, message: 'unsupported' } }) + '\n' }
       if (m.id !== undefined && m.error) return { ...fail(m.error.message), done: true }
       if (m.id === 1) return { write: JSON.stringify({ method: 'initialized' }) + '\n' + request('thread/start', { model: modelName, sandbox: 'read-only', approvalPolicy: 'never', ephemeral: true, cwd }) }
       if (m.id === 2)
-        return { write: request('turn/start', { threadId: m.result.thread.id, input: [{ type: 'text', text: prompt, text_elements: [] }], effort, outputSchema: schema }) }
+        return { mark: 'startupMs', write: request('turn/start', { threadId: m.result.thread.id, input: [{ type: 'text', text: prompt, text_elements: [] }], effort, outputSchema: schema }) }
       if (m.method === 'item/agentMessage/delta') return { event: { t: 'delta', text: m.params.delta } }
+      if (m.method === 'item/started' && m.params.item.type !== 'userMessage') return { mark: 'firstByteMs' }
+      if (m.method === 'item/reasoning/textDelta' || m.method === 'item/reasoning/summaryTextDelta') return { mark: 'firstReasoningMs' }
       if (m.method === 'thread/tokenUsage/updated') last = m.params.tokenUsage.last
       if (m.method === 'error' && !m.params.willRetry) return { ...fail(m.params.error.message), done: true }
       if (m.method !== 'turn/completed') return {}
@@ -150,7 +154,7 @@ export function codexSession({ modelName, prompt, effort, schema }: Job, cwd: st
       if (status !== 'completed') return { ...fail(error?.message ?? `codex turn ${status}`), done: true }
       return {
         done: true,
-        event: { t: 'usage', inputTokens: last?.inputTokens ?? 0, outputTokens: last?.outputTokens ?? 0, cachedInputTokens: last?.cachedInputTokens, cacheWriteTokens: last?.cacheWriteInputTokens },
+        event: { t: 'usage', inputTokens: last?.inputTokens ?? 0, outputTokens: last?.outputTokens ?? 0, cachedInputTokens: last?.cachedInputTokens, cacheWriteTokens: last?.cacheWriteInputTokens, reasoningTokens: last?.reasoningOutputTokens },
       }
     },
   }
@@ -175,29 +179,35 @@ const mapEvent: Record<'claude-code', (e: CliEvent) => RunEvent | undefined> = {
 
 export const eventMapper = (provider: 'claude-code') => mapEvent[provider]
 
+export const claudePhase = (e: CliEvent): keyof Phases | undefined =>
+  e.type === 'system' && e.subtype === 'init' ? 'startupMs' : e.type === 'stream_event' && !e.parent_tool_use_id && e.event?.type === 'message_start' ? 'firstByteMs' : undefined
+
 type OpencodeEvent = { type?: string; data?: any }
 
 // Bus events of `opencode serve` (v2.0.32, experimental API).
 export function opencodeSession() {
-  let total: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteTokens: number } | undefined
+  let total: { inputTokens: number; outputTokens: number; cachedInputTokens: number; cacheWriteTokens: number; reasoningTokens: number } | undefined
   const streamed = new Set<string>()
   let own: string | undefined
   return {
-    handle({ type, data = {} }: OpencodeEvent): { event?: RunEvent; done?: boolean } {
+    handle({ type, data = {} }: OpencodeEvent): Step {
       // The fresh server's first session.created is ours: the event stream opens before the session is created.
       if (type === 'session.created') own ??= data.sessionID
       if (!own || data.sessionID !== own) return {}
+      if (type === 'session.step.started') return { mark: 'firstByteMs' }
+      if (type === 'session.reasoning.delta') return { mark: 'firstReasoningMs' }
       const part = `${data.assistantMessageID}:${data.ordinal}`
       if (type === 'session.text.delta' && typeof data.delta === 'string') return streamed.add(part), { event: { t: 'delta', text: data.delta } }
       // Fallback for text that arrived without deltas.
       if (type === 'session.text.ended' && !streamed.has(part) && data.text) return { event: { t: 'delta', text: String(data.text) } }
       if (type === 'session.step.ended' && data.tokens) {
         const { input = 0, output = 0, reasoning = 0, cache: { read = 0, write = 0 } = {} } = data.tokens
-        total ??= { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0 }
+        total ??= { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0 }
         total.inputTokens += input + read + write
         total.outputTokens += output + reasoning
         total.cachedInputTokens += read
         total.cacheWriteTokens += write
+        total.reasoningTokens += reasoning
       }
       if (type === 'session.execution.succeeded') return { done: true, event: total && { t: 'usage', ...total } }
       if (type === 'session.execution.failed') return { done: true, event: { t: 'error', message: String(data.error?.message ?? 'opencode failed') } }
@@ -221,7 +231,7 @@ const listening = (stdout: Readable) =>
   })
 
 // Starts a session on the private server and yields its SSE data lines; ends quietly when the server goes away.
-async function* opencodeStream(stdout: Readable, { modelName, prompt, effort }: Job, signal: AbortSignal) {
+async function* opencodeStream(stdout: Readable, { modelName, prompt, effort }: Job, signal: AbortSignal, onReady: () => void) {
   const server = await listening(stdout)
   if (!server) return
   const headers = { authorization: `Basic ${Buffer.from(`opencode:${server.password}`).toString('base64')}`, 'content-type': 'application/json' }
@@ -235,6 +245,7 @@ async function* opencodeStream(stdout: Readable, { modelName, prompt, effort }: 
   const [providerID, ...id] = modelName.split('/')
   const session = await post('/api/session', { title: 'playground', agent: 'playground', model: { providerID, id: id.join('/'), variant: effort }, permissions: readOnly })
   await post(`/api/session/${session.id}/prompt`, { text: prompt })
+  onReady()
   const body = Readable.fromWeb(events.body as never).on('error', () => {})
   try {
     for await (const line of createInterface({ input: body })) if (line.startsWith('data: ')) yield line.slice(6)
@@ -368,20 +379,33 @@ export function runCli(provider: CliProvider, job: Job, signal: AbortSignal, tim
         p.child.stderr.on('data', (d) => (stderr = (stderr + d).slice(-1000)))
 
         let ttftMs: number | null = null
+        const phases: Phases = {}
+        const at = (phase: keyof Phases) => (phases[phase] ??= performance.now() - started)
         const map = provider === 'claude-code' ? eventMapper(provider) : undefined
         let finished = false
-        const lines = provider === 'opencode' ? opencodeStream(p.child.stdout, job, signal) : createInterface({ input: p.child.stdout })
+        const lines = provider === 'opencode' ? opencodeStream(p.child.stdout, job, signal, () => at('startupMs')) : createInterface({ input: p.child.stdout })
         for await (const line of lines) {
           const parsed = parse(line)
           let event: RunEvent | undefined
+          let mark: keyof Phases | undefined
           if (session && parsed) {
-            const step: { write?: string; event?: RunEvent; done?: boolean } = session.handle(parsed)
+            const step: Step = session.handle(parsed)
             if (step.write) p.child.stdin.write(step.write)
             event = step.event
+            mark = step.mark
             finished = !!step.done
-          } else event = parsed && map?.(parsed)
+          } else if (map && parsed) {
+            event = map(parsed)
+            mark = claudePhase(parsed)
+          }
+          // Reasoning and visible text are model activity too, so firstByteMs ≤ firstReasoningMs and ≤ ttftMs.
+          if (mark === 'firstReasoningMs') at('firstByteMs')
+          if (mark) at(mark)
           if (event && !(event.t === 'error' && failed)) {
-            if (event.t === 'delta') ttftMs ??= performance.now() - started
+            if (event.t === 'delta') {
+              at('firstByteMs')
+              ttftMs ??= performance.now() - started
+            }
             if (event.t === 'error') failed = true
             send(event)
           }
@@ -396,7 +420,7 @@ export function runCli(provider: CliProvider, job: Job, signal: AbortSignal, tim
         else if (spawnError) send({ t: 'error', message: spawnError.message })
         else if ((code !== 0 || provider === 'opencode') && !finished)
           send({ t: 'error', message: stderr.trim() || (provider === 'opencode' ? 'opencode server stopped before the run finished' : `${bins[provider]} exited with code ${code}`) })
-        else send({ t: 'done', ttftMs, totalMs: performance.now() - started })
+        else send({ t: 'done', ttftMs, totalMs: performance.now() - started, ...phases })
       } catch (error) {
         if (!failed) send({ t: 'error', message: error instanceof Error ? error.message : String(error) })
       } finally {

@@ -33,7 +33,7 @@ test('deltas are optional but must join to rawOutput', () => {
 test.each(['json-render', 'flat-strict', 'html', 'markup'])('measurement metrics are optional for old %s runs and preserved on new runs', (approach) => {
   const legacy = { ...run, approach }
   expect(RunRecord.parse(legacy).metrics).toEqual(run.metrics)
-  const metrics = { ...run.metrics, cachedInputTokens: 1200, cacheWriteTokens: 0, outputChars: run.rawOutput.length, coverage: 0.75, fidelity: 1 }
+  const metrics = { ...run.metrics, cachedInputTokens: 1200, cacheWriteTokens: 0, reasoningTokens: 40, startupMs: 600, firstByteMs: 3100, firstReasoningMs: 3200, outputChars: run.rawOutput.length, coverage: 0.75, fidelity: 1 }
   expect(RunRecord.parse({ ...legacy, metrics }).metrics).toEqual(metrics)
   expect(RunRecord.safeParse({ ...run, metrics: { ...metrics, coverage: 1.1 } }).success).toBe(false)
   expect(RunRecord.safeParse({ ...run, metrics: { ...metrics, fidelity: -0.1 } }).success).toBe(false)

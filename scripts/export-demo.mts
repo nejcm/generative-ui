@@ -14,7 +14,7 @@ const runs: any[] = readdirSync(src)
   .filter((f) => f.endsWith('.json'))
   .map((f) => RunRecord.parse(JSON.parse(readFileSync(src + f, 'utf8'))))
   .filter((r: any) => !r.metrics.aborted && !transportFailure(r))
-  .map(({ notes: _n, rating: _r, ...r }: any) => ({ ...r, batchId: [r.presetId ?? 'custom', r.modelId, r.settings.effort ?? 'default'].join('_') }))
+  .map(({ notes: _n, rating: _r, ...r }: any) => ({ ...r, batchId: [r.presetId ?? 'custom', r.modelId, r.settings.effort ?? 'default'].join('_').replace(/[^\w-]/g, '-') }))
 
 const groups = Map.groupBy(runs, (r) => r.batchId)
 const modelOf = (g: any[]) => g[0].modelId

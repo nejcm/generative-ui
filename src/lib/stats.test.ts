@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupBy, median, topErrors } from './stats.ts'
+import { groupBy, median, thinkingMs, topErrors, waitMs, writingTokensPerSec } from './stats.ts'
 import type { RunSummary } from './run.ts'
 
 const run = (over: Partial<RunSummary['metrics']> & { approach?: RunSummary['approach'] } = {}): RunSummary => {
@@ -23,6 +23,20 @@ describe('stats', () => {
     expect(g.validPct).toBeCloseTo(66.67, 1)
     expect(g.totalMs).toBe(2000)
     expect(g.tokensPerSec).toBe(100)
+  })
+
+  it('writing tok/s counts visible output over the time after the first token', () => {
+    const m = run({ ttftMs: 3000, totalMs: 5000, outputTokens: 600, reasoningTokens: 200, startupMs: 500, firstByteMs: 1000 }).metrics
+    expect(writingTokensPerSec(m)).toBe(200)
+    expect(waitMs(m)).toBe(2500)
+    expect(thinkingMs(m)).toBe(2000)
+    // Old opencode runs arrived as one delta at the end: no writing window.
+    expect(writingTokensPerSec(run({ ttftMs: 2000, totalMs: 2000 }).metrics)).toBeNull()
+    expect(writingTokensPerSec(run({ ttftMs: null }).metrics)).toBeNull()
+    expect(waitMs(run().metrics)).toBeNull()
+    const [g] = groupBy([run({ ttftMs: 1000, totalMs: 3000 }), run({ ttftMs: 1000, totalMs: 2000 })], () => 'all')
+    expect(g).toMatchObject({ writingTokensPerSec: 150, startupMs: null, thinkingMs: null, reasoningTokens: null })
+    expect(g.tokensPerSec).toBeCloseTo(83.33, 2)
   })
 
   it('counts repeated errors per approach, most common first', () => {

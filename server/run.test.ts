@@ -31,5 +31,5 @@ test('Anthropic requests cache the system block and forward cache usage', async 
   for await (const event of readNdjson(res.body!)) events.push(event)
   expect(requests[0].system).toEqual([{ type: 'text', text: 'System prompt', cache_control: { type: 'ephemeral' } }])
   expect(events[0]).toEqual({ t: 'usage', inputTokens: 1034, outputTokens: 3, cachedInputTokens: 1024, cacheWriteTokens: 0 })
-  expect(events[1]).toMatchObject({ t: 'done' })
+  expect(events[1]).toMatchObject({ t: 'done', startupMs: 0, firstByteMs: expect.any(Number) })
 })

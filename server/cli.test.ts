@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
 import { readNdjson, type RunEvent } from '../src/lib/ndjson.ts'
-import { cliArgs, codexSession, eventMapper, killAllClis, opencodeConfigText, opencodeSession, probeClis, runCli } from './cli.ts'
+import { claudePhase, cliArgs, codexSession, eventMapper, killAllClis, opencodeConfigText, opencodeSession, probeClis, runCli } from './cli.ts'
 
 // Each spawn runs a real node child that plays the given script, so pipes, exit codes and process groups are real.
 const fake = vi.hoisted(() => ({
@@ -57,6 +57,7 @@ test('maps claude stream-json text deltas and result usage', () => {
     { t: 'usage', inputTokens: 810, outputTokens: 10, cachedInputTokens: 0, cacheWriteTokens: 808 },
   ])
   expect(mapped('claude-code', 'claude-error')).toEqual([{ t: 'error', message: expect.stringContaining('issue with the selected model') }])
+  expect(lines('claude-text').map(claudePhase).filter(Boolean)).toEqual(['startupMs', 'firstByteMs'])
 })
 
 test('codex session walks initialize, thread/start and turn/start, then streams deltas and usage', () => {
@@ -65,16 +66,21 @@ test('codex session walks initialize, thread/start and turn/start, then streams 
   const [initialized, threadStart] = session.handle({ id: 1, result: {} }).write!.trim().split('\n').map((l) => JSON.parse(l))
   expect(initialized).toEqual({ method: 'initialized' })
   expect(threadStart).toMatchObject({ id: 2, method: 'thread/start', params: { model: 'm', sandbox: 'read-only', approvalPolicy: 'never', ephemeral: true, cwd: '/tmp/x/cwd' } })
-  expect(JSON.parse(session.handle({ id: 2, result: { thread: { id: 'th' } } }).write!)).toMatchObject({
+  const threadStarted = session.handle({ id: 2, result: { thread: { id: 'th' } } })
+  expect(threadStarted.mark).toBe('startupMs')
+  expect(JSON.parse(threadStarted.write!)).toMatchObject({
     id: 3,
     method: 'turn/start',
     params: { threadId: 'th', effort: 'low', outputSchema: { type: 'integer' }, input: [{ type: 'text', text: 'hi' }] },
   })
+  expect(session.handle({ method: 'item/started', params: { item: { type: 'userMessage' } } })).toEqual({})
+  expect(session.handle({ method: 'item/started', params: { item: { type: 'reasoning' } } })).toEqual({ mark: 'firstByteMs' })
+  expect(session.handle({ method: 'item/reasoning/summaryTextDelta', params: { delta: 'hm' } })).toEqual({ mark: 'firstReasoningMs' })
   expect(session.handle({ method: 'item/agentMessage/delta', params: { delta: 'PINE' } })).toEqual({ event: { t: 'delta', text: 'PINE' } })
-  session.handle({ method: 'thread/tokenUsage/updated', params: { tokenUsage: { last: { inputTokens: 100, cachedInputTokens: 60, cacheWriteInputTokens: 0, outputTokens: 7 } } } })
+  session.handle({ method: 'thread/tokenUsage/updated', params: { tokenUsage: { last: { inputTokens: 100, cachedInputTokens: 60, cacheWriteInputTokens: 0, outputTokens: 7, reasoningOutputTokens: 3 } } } })
   expect(session.handle({ method: 'turn/completed', params: { turn: { status: 'completed' } } })).toEqual({
     done: true,
-    event: { t: 'usage', inputTokens: 100, outputTokens: 7, cachedInputTokens: 60, cacheWriteTokens: 0 },
+    event: { t: 'usage', inputTokens: 100, outputTokens: 7, cachedInputTokens: 60, cacheWriteTokens: 0, reasoningTokens: 3 },
   })
 })
 
@@ -96,7 +102,16 @@ test('maps recorded opencode serve text deltas and step usage, ignoring session-
   expect(deltas).toHaveLength(51)
   const ended = lines('opencode-serve').find((e) => e.type === 'session.text.ended')
   expect(deltas.map((e) => e.text).join('')).toBe(ended.data.text)
-  expect(events.at(-1)).toEqual({ t: 'usage', inputTokens: 756, outputTokens: 709, cachedInputTokens: 0, cacheWriteTokens: 0 })
+  expect(events.at(-1)).toEqual({ t: 'usage', inputTokens: 756, outputTokens: 709, cachedInputTokens: 0, cacheWriteTokens: 0, reasoningTokens: 0 })
+  expect(played('opencode-serve').flatMap((s) => s.mark ?? [])).toEqual(['firstByteMs'])
+})
+
+test('opencode step usage keeps reasoning in output tokens and reports it separately', () => {
+  const session = opencodeSession()
+  session.handle({ type: 'session.created', data: { sessionID: 'ses_1' } })
+  expect(session.handle({ type: 'session.reasoning.delta', data: { sessionID: 'ses_1', delta: 'hm' } })).toEqual({ mark: 'firstReasoningMs' })
+  session.handle({ type: 'session.step.ended', data: { sessionID: 'ses_1', tokens: { input: 10, output: 20, reasoning: 5, cache: { read: 0, write: 0 } } } })
+  expect(session.handle({ type: 'session.execution.succeeded', data: { sessionID: 'ses_1' } }).event).toMatchObject({ outputTokens: 25, reasoningTokens: 5 })
 })
 
 test('opencode session drops other sessions and falls back to whole text parts without deltas', () => {
@@ -146,7 +161,9 @@ test('opencode runs a private loopback server with a deny-all-but-read config, t
   )
   const events = await collect(runCli('opencode', { ...job, modelName: 'opencode-go/kimi-k3', effort: 'max' }, new AbortController().signal))
   expect(events.map((e) => e.t)).toEqual([...Array(51).fill('delta'), 'usage', 'done'])
-  expect(events.at(-1)).toMatchObject({ ttftMs: expect.any(Number) })
+  const done = events.at(-1) as Extract<RunEvent, { t: 'done' }>
+  expect(done.startupMs).toBeLessThanOrEqual(done.firstByteMs!)
+  expect(done.firstByteMs).toBeLessThanOrEqual(done.ttftMs!)
   const { opts, child } = lastRun()
   expect(child.signalCode).toBe('SIGKILL')
   expect(opts.env).toMatchObject({
@@ -201,7 +218,7 @@ test('runs claude in a removed temp dir with no tools, an allowlisted env and th
   fake.scripts.claude = claudeAuth('claude.ai', `let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{if(s!=='hi')process.exit(3);${replay('claude-text')}})`)
   const events = await collect(runCli('claude-code', { ...job, effort: 'low' }, new AbortController().signal))
   expect(events.slice(0, 3).map((e) => e.t)).toEqual(['delta', 'delta', 'usage'])
-  expect(events[3]).toMatchObject({ t: 'done', ttftMs: expect.any(Number) })
+  expect(events[3]).toMatchObject({ t: 'done', ttftMs: expect.any(Number), startupMs: expect.any(Number), firstByteMs: expect.any(Number) })
   const { args, opts } = lastRun()
   expect(args).toEqual(expect.arrayContaining(['--tools', '', '--strict-mcp-config', '--setting-sources', '', '--effort', 'low']))
   expect(opts.env).not.toHaveProperty('ANTHROPIC_API_KEY')
@@ -226,6 +243,8 @@ test('codex gets the system prompt as a file and the schema in turn/start, with 
 out({method:'item/agentMessage/delta',params:{delta:'{"n":0}'}});out({method:'turn/completed',params:{turn:{status:'completed'}}})`)
   const events = await collect(runCli('codex', { ...job, schema: { type: 'integer' } }, new AbortController().signal))
   expect(events.map((e) => e.t)).toEqual(['delta', 'usage', 'done'])
+  expect(events[2]).toMatchObject({ startupMs: expect.any(Number), firstByteMs: expect.any(Number) })
+  expect(events[2]).not.toHaveProperty('firstReasoningMs')
   const { opts } = lastRun()
   expect((opts.env as Record<string, string>).CODEX_HOME).toMatch(/playground-cli-.*codex-home$/)
   expect(lastRun().child.signalCode).toBe('SIGKILL')
