@@ -224,9 +224,14 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
           </tbody>
         </table>
         {groups.length > shown && (
-          <button type="button" className="btn btn-sm self-center" onClick={() => setShown((n) => n + PAGE)}>
-            Show more ({groups.length - shown} groups left)
-          </button>
+          <div className="flex items-center justify-center gap-3 border-t py-3">
+            <span className="muted">
+              Showing {shown} of {groups.length} groups
+            </span>
+            <button type="button" className="btn btn-sm" onClick={() => setShown((n) => n + PAGE)}>
+              Show {Math.min(PAGE, groups.length - shown)} more
+            </button>
+          </div>
         )}
         {runs?.length === 0 && <p className="ph">No runs yet. Runs are saved here when they finish in the Lab.</p>}
       </section>
