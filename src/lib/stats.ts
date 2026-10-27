@@ -22,6 +22,24 @@ export function median(values: (number | null | undefined)[]): number | null {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
 }
 
+export function spread(values: (number | null | undefined)[]): { median: number; min: number; max: number } | null {
+  const s = values.filter((v): v is number => v != null).sort((a, b) => a - b)
+  return s.length ? { median: median(s)!, min: s[0], max: s.at(-1)! } : null
+}
+
+// Rep indexes still to run for a cell; runs saved without `rep` fill the lowest free indexes.
+export function missingReps(taken: (number | undefined)[], repeats: number): number[] {
+  const tagged = new Set(taken.filter((r) => r != null))
+  let untagged = taken.filter((r) => r == null).length
+  const missing: number[] = []
+  for (let rep = 0; rep < repeats; rep++) {
+    if (tagged.has(rep)) continue
+    if (untagged) untagged--
+    else missing.push(rep)
+  }
+  return missing
+}
+
 export function summarize(key: string, runs: RunSummary[]): Group {
   const done = runs.filter((r) => !r.metrics.aborted)
   return {

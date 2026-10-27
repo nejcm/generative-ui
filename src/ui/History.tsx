@@ -69,7 +69,8 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
     )
   const act = (fn: () => Promise<void>) => () => fn().catch((e: Error) => setError(e.message))
   const openGroup = (group: RunSummary[]) => act(async () => onOpenBatch(await loadRuns(group)))
-  const groups = [...new Set(runs?.map(configOf))].map((config) => [config, runs!.filter((r) => configOf(r) === config).reverse()] as const)
+  const keyOf = (r: RunSummary) => `${r.batchId}|${configOf(r)}`
+  const groups = [...new Set(runs?.map(keyOf))].map((key) => [key, runs!.filter((r) => keyOf(r) === key).reverse()] as const)
 
   const sel = selected?.run
   const selStatus = sel ? statusOf(false, true, selected.state.renderable, sel.metrics) : 'idle'
@@ -106,13 +107,13 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
             </tr>
           </thead>
           <tbody>
-            {groups.slice(0, shown).map(([config, group]) => (
-              <Fragment key={config}>
+            {groups.slice(0, shown).map(([key, group]) => (
+              <Fragment key={key}>
                 <tr className="batch">
                   <td colSpan={10}>
                     <div className="flex items-center gap-3">
                       <span>
-                        {config} · {group.length} {group.length === 1 ? 'run' : 'runs'}
+                        {configOf(group[0])} · {group.length} {group.length === 1 ? 'run' : 'runs'}
                       </span>
                       <span className="muted" style={{ fontWeight: 400 }}>
                         {new Date(group[0].createdAt).toLocaleString()} · {batchUsd(group.map(costOf))}
@@ -202,7 +203,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
                                 <span className="muted">{sel.rating ? words[sel.rating] : 'Not rated'}</span>
                               </div>
                               {sel.notes && <p className="caveat">{sel.notes}</p>}
-                              <button type="button" className="btn self-start" onClick={openGroup(groups.find(([config]) => config === configOf(sel))![1])}>
+                              <button type="button" className="btn self-start" onClick={openGroup(groups.find(([key]) => key === keyOf(sel))![1])}>
                                 Open group in Lab
                               </button>
                             </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupBy, median, thinkingMs, topErrors, waitMs, writingTokensPerSec } from './stats.ts'
+import { groupBy, median, missingReps, spread, thinkingMs, topErrors, waitMs, writingTokensPerSec } from './stats.ts'
 import type { RunSummary } from './run.ts'
 
 const run = (over: Partial<RunSummary['metrics']> & { approach?: RunSummary['approach'] } = {}): RunSummary => {
@@ -37,6 +37,20 @@ describe('stats', () => {
     const [g] = groupBy([run({ ttftMs: 1000, totalMs: 3000 }), run({ ttftMs: 1000, totalMs: 2000 })], () => 'all')
     expect(g).toMatchObject({ writingTokensPerSec: 150, startupMs: null, thinkingMs: null, reasoningTokens: null })
     expect(g.tokensPerSec).toBeCloseTo(83.33, 2)
+  })
+
+  it('spread gives median, min and max, skipping nulls', () => {
+    expect(spread([3, null, 1, 2])).toEqual({ median: 2, min: 1, max: 3 })
+    expect(spread([5])).toEqual({ median: 5, min: 5, max: 5 })
+    expect(spread([null])).toBeNull()
+  })
+
+  it('missingReps skips done reps and lets untagged runs fill the lowest free ones', () => {
+    expect(missingReps([], 3)).toEqual([0, 1, 2])
+    expect(missingReps([1], 3)).toEqual([0, 2])
+    expect(missingReps([undefined], 3)).toEqual([1, 2])
+    expect(missingReps([undefined, 0], 3)).toEqual([2])
+    expect(missingReps([undefined, undefined], 1)).toEqual([])
   })
 
   it('counts repeated errors per approach, most common first', () => {

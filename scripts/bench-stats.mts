@@ -4,7 +4,7 @@ import { createJiti } from 'jiti'
 import { readdirSync, readFileSync } from 'node:fs'
 
 const root = new URL('../src', import.meta.url).pathname
-const { groupBy, topErrors } = await createJiti(import.meta.url, { alias: { '@': root } }).import<any>(`${root}/lib/stats.ts`)
+const { groupBy, spread, topErrors, writingTokensPerSec } = await createJiti(import.meta.url, { alias: { '@': root } }).import<any>(`${root}/lib/stats.ts`)
 const dir = new URL('../runs/', import.meta.url).pathname
 const batchId = process.argv[2]
 if (!batchId) throw new Error('usage: node scripts/bench-stats.mts <batchId> [--all]')
@@ -26,6 +26,10 @@ const p90 = (rs: any[]) => {
 }
 const model = (r: any) => r.modelId.replace('-subscription', '').replace('-opencode-go', '').replace('-gateway', '')
 const effort = (r: any) => r.settings.effort ?? 'none'
+const range = (values: (number | null | undefined)[], fmt: (v: number) => string) => {
+  const s = spread(values)
+  return !s ? '–' : s.min === s.max ? fmt(s.median) : `${fmt(s.median)} (${fmt(s.min)}–${fmt(s.max)})`
+}
 const provider = (r: any) => (r.modelId.endsWith('opencode-go') ? 'opencode-go' : r.modelId.endsWith('-gateway') ? 'gateway' : (r.modelId.startsWith('claude') ? 'anthropic' : 'openai') + (r.modelId.endsWith('-subscription') ? ' (cli)' : ' (api)'))
 
 function table(title: string, keyOf: (r: any) => string) {
@@ -41,6 +45,8 @@ function table(title: string, keyOf: (r: any) => string) {
 }
 
 console.log(`batch ${batchId}: ${batch.length} runs, ${batch.length - runs.length} excluded for transport errors, ${batch.filter((r) => r.metrics.aborted).length} aborted`)
+const concurrencies = Object.entries(Object.groupBy(runs, (r) => String(r.concurrency ?? 'unrecorded')))
+if (concurrencies.length > 1) console.log(`WARNING: mixed concurrency in one batch (${concurrencies.map(([c, rs]) => `${c}: ${rs!.length}`).join(', ')}); timings are not comparable across them.`)
 const noUsage = Object.groupBy(runs.filter((r) => r.metrics.outputTokens == null), model)
 console.log(`no usage reported: ${Object.entries(noUsage).map(([m, rs]) => `${m} ${rs!.length}`).join(', ') || 'none'}`)
 table('By approach', (r) => r.approach)
@@ -56,5 +62,10 @@ const odd = new Map([...effortSets].filter(([, set]) => set !== common))
 table('Model × effort', (r) => `${model(r)} · ${effort(r)}${odd.has(model(r)) ? ' †' : ''}`)
 if (odd.size) console.log(`\n† effort set differs from the most common (${common}): ${[...odd].map(([m, set]) => `${m} ${set}`).join('; ')}. Compare those models at matched effort only.`)
 table('Approach × preset', (r) => `${r.approach} · ${r.presetId}`)
+console.log(`\n### Cells over reps (median, min–max)\n\n| model · effort · approach · preset | n | valid % | TTFT s | total s | out tok | writing tok/s |\n|${'---|'.repeat(7)}`)
+for (const [key, rs] of Object.entries(Object.groupBy(runs, (r) => `${model(r)} · ${effort(r)} · ${r.approach} · ${r.presetId}`)).sort(([a], [b]) => a.localeCompare(b))) {
+  const m = rs!.filter((r) => !r.metrics.aborted).map((r) => r.metrics)
+  console.log(`| ${key} | ${rs!.length} | ${((100 * rs!.filter((r) => r.metrics.valid).length) / rs!.length).toFixed(0)} | ${range(m.map((x) => x.ttftMs), sec)} | ${range(m.map((x) => x.totalMs), sec)} | ${range(m.map((x) => x.outputTokens), num)} | ${range(m.map(writingTokensPerSec), num)} |`)
+}
 console.log('\n### Top errors\n')
 for (const e of topErrors(runs, 12)) console.log(`- ${e.count}× ${e.approach}: ${e.message}`)

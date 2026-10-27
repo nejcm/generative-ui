@@ -44,6 +44,9 @@ export const RunRecord = z.strictObject({
     errors: z.array(error),
     aborted: z.boolean(),
   }),
+  // Bench only: repetition index of the cell, and max runs in flight on the same plan.
+  rep: z.int().min(0).optional(),
+  concurrency: z.int().min(1).optional(),
   rating: z.int().min(1).max(5).optional(),
   notes: z.string().optional(),
 }).refine((run) => !run.deltas || run.deltas.map((d) => d[1]).join('') === run.rawOutput, { message: 'deltas do not join to rawOutput', path: ['deltas'] })

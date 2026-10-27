@@ -1,5 +1,6 @@
 // Headless benchmark: runs the model × effort × approach × preset matrix against a running dev API and saves each run via POST /api/runs.
 // Usage: node scripts/bench.mts <batchId> [--repeats N] [--presets a,b] [--provider p] [--match substring] [--limit N] [--api | --gateway] [--concurrency N] [--per-plan N] [--delay-ms N]
+// --concurrency caps runs in flight overall (default 3); --per-plan caps them per plan (default 1, so a plan runs sequentially).
 // --api runs the fixed API-billed matrix (anthropic, openai, opencode-go) instead of the CLI models; --gateway runs every AI Gateway model at its lowest and highest effort, skipping xhigh and max.
 // Needs jiti (transitive dependency) to load the app's TS modules with the `@` alias.
 import { createJiti } from 'jiti'
@@ -7,8 +8,8 @@ import { createJiti } from 'jiti'
 const root = new URL('../src', import.meta.url).pathname
 const jiti = createJiti(import.meta.url, { alias: { '@': root }, jsx: true })
 const load = (path: string) => jiti.import<any>(`${root}/${path}`)
-const [{ record }, { approaches }, { catalog }, { models }, { fixtures, presets }, { readNdjson }, { strictOutputOf }] = await Promise.all(
-  ['lib/recorder.ts', 'approaches/index.ts', 'catalog/catalog.tsx', 'models.ts', 'prompts.ts', 'lib/ndjson.ts', 'lib/run.ts'].map(load),
+const [{ record }, { approaches }, { catalog }, { models }, { fixtures, presets }, { readNdjson }, { strictOutputOf }, { missingReps }] = await Promise.all(
+  ['lib/recorder.ts', 'approaches/index.ts', 'catalog/catalog.tsx', 'models.ts', 'prompts.ts', 'lib/ndjson.ts', 'lib/run.ts', 'lib/stats.ts'].map(load),
 )
 
 const API = 'http://127.0.0.1:8787'
@@ -22,7 +23,8 @@ if (!batchId || batchId.startsWith('--')) throw new Error('usage: node scripts/b
 const repeats = Number(has('repeats') ? flag('repeats') : 1)
 const presetIds = (has('presets') ? flag('presets') : has('api') || has('gateway') ? presets.map((p: any) => p.id).join(',') : 'login,dashboard,comparison').split(',')
 const concurrency = has('concurrency') ? Number(flag('concurrency')) : 3
-const perPlan = has('per-plan') ? Number(flag('per-plan')) : Infinity
+const perPlan = has('per-plan') ? Number(flag('per-plan')) : 1
+const runConcurrency = Math.min(concurrency, perPlan)
 const delayMs = has('delay-ms') ? Number(flag('delay-ms')) : 0
 const API_MATRIX: Record<string, (string | undefined)[]> = {
   'claude-haiku-5-5': ['low', 'medium'],
@@ -56,11 +58,11 @@ const gatewayEffortsOf = (m: any): (string | undefined)[] => {
   return all.length ? (all.length > 2 ? [all[0], all.at(-1)] : all) : [undefined]
 }
 
-const existing = (await fetch(`${API}/api/runs?batchId=${batchId}`).then((r) => r.json())) as { modelId: string; settings: { effort?: string }; approach: string; presetId?: string }[]
-const have = new Map<string, number>()
+const existing = (await fetch(`${API}/api/runs?batchId=${batchId}`).then((r) => r.json())) as { modelId: string; settings: { effort?: string }; approach: string; presetId?: string; rep?: number }[]
+const have = new Map<string, (number | undefined)[]>()
 for (const r of existing) {
   const key = cell(r.modelId, r.settings.effort, r.approach, r.presetId ?? '')
-  have.set(key, (have.get(key) ?? 0) + 1)
+  have.set(key, [...(have.get(key) ?? []), r.rep])
 }
 
 const cliModels = models.filter((m: any) => !m.hidden && (has('gateway') ? m.provider === 'gateway' : has('api') ? m.id in API_MATRIX : ['claude-code', 'codex', 'opencode'].includes(m.provider)) && (!has('provider') || m.provider === flag('provider')) && (!has('match') || m.id.includes(flag('match'))))
@@ -69,8 +71,8 @@ for (const model of cliModels)
   for (const effort of has('api') ? API_MATRIX[model.id] : has('gateway') ? gatewayEffortsOf(model) : effortsOf(model))
     for (const approach of approaches)
       for (const presetId of presetIds) {
-        const missing = repeats - (have.get(cell(model.id, effort, approach.id, presetId)) ?? 0)
-        for (let i = 0; i < missing; i++) queue.push({ model, effort, approach, preset: presets.find((p: any) => p.id === presetId) })
+        for (const rep of missingReps(have.get(cell(model.id, effort, approach.id, presetId)) ?? [], repeats))
+          queue.push({ model, effort, approach, rep, preset: presets.find((p: any) => p.id === presetId) })
       }
 // Shuffle so providers interleave and no single plan's rate limit is hit in a burst.
 for (let i = queue.length - 1; i > 0; i--) {
@@ -99,7 +101,7 @@ async function nextJob() {
 
 async function worker() {
   for (let job; (job = await nextJob()); ) {
-    const { model, effort, approach, preset } = job
+    const { model, effort, approach, rep, preset } = job
     const plan = planOf(model)
     active.set(plan, (active.get(plan) ?? 0) + 1)
     try {
@@ -130,11 +132,11 @@ async function worker() {
         console.log(`${planOf(model)} stopped: ${limit.message}`)
         continue
       }
-      const res = await fetch(`${API}/api/runs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(run) })
+      const res = await fetch(`${API}/api/runs`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...run, rep, concurrency: runConcurrency }) })
       if (!res.ok) console.log('SAVE FAILED', res.status, await res.text())
       done++
       if (!run.metrics.valid) invalid++
-      console.log(`[${done}] ${model.id} ${effort ?? '-'} ${approach.id} ${preset.id} ${(run.metrics.totalMs / 1000).toFixed(1)}s valid=${run.metrics.valid} ${run.metrics.errors[0]?.message.slice(0, 90) ?? ''}`)
+      console.log(`[${done}] ${model.id} ${effort ?? '-'} ${approach.id} ${preset.id} #${rep} ${(run.metrics.totalMs / 1000).toFixed(1)}s valid=${run.metrics.valid} ${run.metrics.errors[0]?.message.slice(0, 90) ?? ''}`)
     } finally {
       active.set(plan, active.get(plan)! - 1)
     }
