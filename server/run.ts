@@ -53,7 +53,8 @@ export async function run(c: Context) {
     ...(strict && {
       output: Output.object({ schema: jsonSchema(output.schema as JSONSchema7) }),
     }),
-    ...(model.host && { providerOptions: { gateway: { only: [model.host] } } }),
+    // Some gateway hosts default to 4096 output tokens, which reasoning can use up; 32768 is DeepSeek V4.1 Flash's max, the lowest here.
+    ...(model.host && { providerOptions: { gateway: { only: [model.host] } }, maxOutputTokens: 32768 }),
     maxRetries: 0, // retries would distort TTFT and total time
     abortSignal: signal,
   })
