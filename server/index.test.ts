@@ -29,6 +29,7 @@ test('GET /api/health', async () => {
 test('GET /api/models lists models whose provider key is set or whose CLI is logged in', async () => {
   vi.stubEnv('ANTHROPIC_API_KEY', 'test')
   vi.stubEnv('OPENAI_API_KEY', '')
+  vi.stubEnv('AI_GATEWAY_API_KEY', '')
   const ids = ((await (await app.request('/api/models')).json()) as { id: string }[]).map((m) => m.id)
   expect(ids).toEqual(['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5', 'gpt-6-luna-subscription', 'gpt-6.1-sol-subscription'])
 })

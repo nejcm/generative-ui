@@ -1,4 +1,4 @@
-export type Provider = 'anthropic' | 'openai' | 'claude-code' | 'codex' | 'opencode'
+export type Provider = 'anthropic' | 'openai' | 'gateway' | 'claude-code' | 'codex' | 'opencode'
 
 export type Plan = 'subscription' | 'subscription or credits'
 
@@ -10,6 +10,10 @@ export type Model = {
   // Absent for subscription models, which are billed by the user's plan.
   price?: { inPerMTok: number; outPerMTok: number; cachedInPerMTok?: number; cacheWritePerMTok?: number; source: string; checkedAt: string }
   plan?: Plan
+  // AI Gateway upstream the run is pinned to.
+  host?: string
+  // Superseded by a faster host; kept so saved runs keep their label and price.
+  hidden?: boolean
   // Reasoning values in the runner's own names, in picker order.
   supports: { strictJson: boolean; effort?: string[]; temperature: boolean }
 }
@@ -74,6 +78,35 @@ const viaCli =
     supports: { strictJson, effort: standardEffort, temperature: false },
   })
 
+const gatewayPricing = 'https://ai-gateway.vercel.sh/v1/models'
+
+// Pinned to one host, since price and quantization vary by upstream; prices and effort from `GET /v1/models/{id}/endpoints`.
+const viaGateway = (
+  name: string,
+  label: string,
+  host: string,
+  effort: string[],
+  temperature: boolean,
+  [inPerMTok, outPerMTok, cachedInPerMTok, cacheWritePerMTok]: number[],
+): Model => ({
+  id: `${name.split('/')[1]}-gateway`,
+  provider: 'gateway',
+  modelName: name,
+  label: `${label} · AI Gateway`,
+  host,
+  price: { inPerMTok, outPerMTok, cachedInPerMTok, cacheWritePerMTok, source: gatewayPricing, checkedAt: '2026-10-27' },
+  supports: { strictJson: true, effort, temperature },
+})
+
+// Same model on a faster third-party host (gateway's 1h throughput stats); may serve lower precision.
+const onFastHost = (m: Model, host: string, [inPerMTok, outPerMTok, cachedInPerMTok]: number[]): Model => ({
+  ...m,
+  id: m.id.replace(/-gateway$/, `-${host}-gateway`),
+  label: m.label.replace(' · AI Gateway', ` · AI Gateway (${host})`),
+  host,
+  price: { ...m.price!, inPerMTok, outPerMTok, cachedInPerMTok, cacheWritePerMTok: undefined },
+})
+
 // Effort values are the general levels among the model's opencode variants (`GET /api/model`, opencode v2.0.32).
 const opencodeGo = (name: string, label: string, effort: string[]): Model => ({
   id: `${name}-opencode-go`,
@@ -95,10 +128,28 @@ const opencodeFree = (name: string, label: string, effort: string[]): Model => (
 })
 
 // claude --json-schema lets the model skip its StructuredOutput tool, so it is prompt-only; codex --output-schema constrains.
+const deepseekGateway = viaGateway('deepseek/deepseek-v4.1-flash', 'DeepSeek V4.1 Flash', 'deepseek', ['low', 'high', 'max'], true, [0.15, 0.6, 0.003])
+
+const glmGateway = viaGateway('zai/glm-5.3-flash', 'GLM-5.3 Flash', 'zai', ['low', 'high', 'max'], true, [0.15, 0.5, 0.03])
+
+const qwen27Gateway = viaGateway('alibaba/qwen3.8-27b', 'Qwen3.8 27B', 'deepinfra', ['low', 'medium', 'xhigh'], true, [0.15, 1.875, 0.0375])
+
 export const models: Model[] = [
   ...apiModels,
   ...apiModels.filter((m) => m.provider === 'anthropic').map(viaCli('claude-code', false)),
   ...apiModels.filter((m) => m.provider === 'openai').map(viaCli('codex', true)),
+  { ...deepseekGateway, hidden: true },
+  onFastHost(deepseekGateway, 'togetherai', [0.3, 1.2, 0.006]),
+  { ...glmGateway, hidden: true },
+  onFastHost(glmGateway, 'boundless', [0.12, 0.4, 0.024]),
+  viaGateway('alibaba/qwen3.8-flash', 'Qwen3.8 Flash', 'alibaba', ['low', 'medium', 'xhigh'], true, [0.15, 0.47, 0.016, 0.2]),
+  viaGateway('xiaomi/mimo-v2.6-flash', 'MiMo V2.6 Flash', 'xiaomi', ['low', 'medium', 'high'], true, [0.14, 0.28, 0.0028]),
+  viaGateway('nvidia/nemotron-3.5-lightning', 'Nemotron 3.5 Lightning', 'fireworks', ['low', 'medium', 'high'], true, [0.05, 0.2, 0.01]),
+  { ...qwen27Gateway, hidden: true },
+  onFastHost(qwen27Gateway, 'cerebras', [0.99, 1.49, 0.99]),
+  viaGateway('minimax/minimax-m3.1-flash', 'MiniMax M3.1 Flash', 'minimax', ['low', 'medium', 'high', 'xhigh', 'max'], true, [0.15, 0.6, 0.015]),
+  viaGateway('stepfun/step-3.7-flash', 'Step 3.7 Flash', 'stepfun', ['low', 'medium', 'high'], true, [0.2, 1.15, 0.04]),
+  viaGateway('thinkingmachines/inkling-small', 'Inkling Small', 'thinkingmachines', ['low', 'medium', 'high', 'xhigh', 'max'], true, [0.3, 1.2, 0.06]),
   opencodeGo('deepseek-v4.1-flash', 'DeepSeek V4.1 Flash', ['high', 'max']),
   opencodeGo('glm-5.3-flash', 'GLM-5.3 Flash', ['high', 'max']),
   opencodeGo('kimi-k3', 'Kimi K3', ['max']),

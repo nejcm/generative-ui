@@ -9,6 +9,7 @@ import { runsApi } from './runs.ts'
 const keyEnv: Record<Exclude<Provider, CliProvider>, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
+  gateway: 'AI_GATEWAY_API_KEY',
 }
 
 let clis: Promise<CliProvider[]> | undefined
@@ -30,7 +31,7 @@ export const app = new Hono()
   .get('/api/health', (c) => c.json({ ok: true }))
   .get('/api/models', async (c) => {
     const ready = await availableClis()
-    return c.json(models.filter((m) => (isCli(m.provider) ? ready.includes(m.provider) : process.env[keyEnv[m.provider]])))
+    return c.json(models.filter((m) => !m.hidden && (isCli(m.provider) ? ready.includes(m.provider) : process.env[keyEnv[m.provider]])))
   })
   .post('/api/run', run)
   .route('/api/runs', runsApi(fileURLToPath(new URL('../runs', import.meta.url))))

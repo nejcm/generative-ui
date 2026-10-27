@@ -20,6 +20,7 @@ All four use one shared component catalog (`src/catalog`).
 Listed by `GET /api/models`, only when usable:
 
 - **API**: Anthropic and OpenAI, when `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set. Billed per token; cost shown from the prices in `src/models.ts`.
+- **Vercel AI Gateway**: smaller open-weight models (DeepSeek, GLM, MiniMax, Qwen, MiMo, Nemotron, Step, Inkling) through the same API path, when `AI_GATEWAY_API_KEY` is set. Each model is pinned to one upstream host (`host` in `src/models.ts`, the maker's own where it supports strict JSON) so price and quantization stay fixed; check that host's data retention before sending sensitive prompts.
 - **Subscription**: local `claude` (Claude Code), `codex` and `opencode` CLIs, when on `PATH` and logged in. Spawned per run with tools off (OpenCode: except `read`, see caveats), an empty temp cwd and an env allowlist; credentials are never read by this app. Cost shows as subscription.
 - `PLAYGROUND_CLI=off` disables the CLI providers.
 
@@ -84,4 +85,4 @@ MIT, see [LICENSE](LICENSE).
 
 ## Static demo
 
-`node scripts/export-demo.mts [--max 100]` bundles saved runs into `public/demo/`. `.github/workflows/pages.yml` builds the app with `VITE_DEMO=1` and deploys it to GitHub Pages as a replay-only site. Run-only controls are disabled; rating does not persist.
+`node scripts/export-demo.mts [--max 100] [--skip id1,id2]` bundles saved runs into `public/demo/`. `.github/workflows/pages.yml` builds the app with `VITE_DEMO=1` and deploys it to GitHub Pages as a replay-only site. Run-only controls are disabled; rating does not persist.

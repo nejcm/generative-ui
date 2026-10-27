@@ -1,13 +1,13 @@
 import { anthropic } from '@ai-sdk/anthropic'
 import { openai } from '@ai-sdk/openai'
-import { Output, jsonSchema, streamText, type JSONSchema7, type LanguageModel } from 'ai'
+import { Output, gateway, jsonSchema, streamText, type JSONSchema7, type LanguageModel } from 'ai'
 import type { Context } from 'hono'
 import { z } from 'zod'
 import type { Phases, RunEvent } from '../src/lib/ndjson.ts'
 import { models, type Provider } from '../src/models.ts'
 import { isCli, runCli, type CliProvider } from './cli.ts'
 
-const providers: Record<Exclude<Provider, CliProvider>, (modelName: string) => LanguageModel> = { anthropic, openai }
+const providers: Record<Exclude<Provider, CliProvider>, (modelName: string) => LanguageModel> = { anthropic, openai, gateway }
 
 const RunRequest = z.object({
   runId: z.string(),
@@ -53,6 +53,8 @@ export async function run(c: Context) {
     ...(strict && {
       output: Output.object({ schema: jsonSchema(output.schema as JSONSchema7) }),
     }),
+    // Some gateway hosts default to 4096 output tokens, which reasoning can use up; 32768 is DeepSeek V4.1 Flash's max, the lowest here.
+    ...(model.host && { providerOptions: { gateway: { only: [model.host] } }, maxOutputTokens: 32768 }),
     maxRetries: 0, // retries would distort TTFT and total time
     abortSignal: signal,
   })

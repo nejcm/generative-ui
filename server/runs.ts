@@ -7,14 +7,22 @@ import { RunPatch, RunRecord, runId, type Run, type RunSummary } from '../src/li
 // createdAt is fixed-width (ms precision, Z), so the id is everything after the 24-char timestamp and a dash.
 const fileName = (run: Run) => `${run.createdAt.replace(/[:.]/g, '-')}-${run.id}.json`
 const idOf = (file: string) => file.slice(25, -'.json'.length)
+const summarize = ({ system: _s, rawOutput: _o, deltas: _d, ...summary }: Run): RunSummary => summary
 
 export function runsApi(dir: string) {
   const files = async () => (await readdir(dir).catch(() => [])).filter((f) => f.endsWith('.json')).sort().reverse()
   const find = async (id: string) => (await files()).find((f) => idOf(f) === id)
   const read = async (file: string): Promise<Run> => JSON.parse(await readFile(join(dir, file), 'utf8'))
+  // shortcut: files edited outside the API stay stale until restart; check mtimes if that becomes a workflow.
+  const summaries = new Map<string, RunSummary>()
+  const summaryOf = async (file: string) => {
+    if (!summaries.has(file)) summaries.set(file, summarize(await read(file)))
+    return summaries.get(file)!
+  }
   const write = async (file: string, run: Run) => {
     await writeFile(join(dir, `${file}.tmp`), JSON.stringify(run, null, 2))
     await rename(join(dir, `${file}.tmp`), join(dir, file))
+    summaries.set(file, summarize(run))
   }
   // One read-modify-write at a time, so overlapping PATCHes can't lose an update or race on the .tmp file.
   let queue: Promise<unknown> = Promise.resolve()
@@ -27,11 +35,8 @@ export function runsApi(dir: string) {
   return new Hono()
     .get('/', async (c) => {
       const { batchId, presetId } = c.req.query()
-      const runs = (await Promise.all((await files()).map((f) => read(f).catch(() => console.warn(`skipping unreadable run ${f}`))))).filter((r) => r !== undefined)
-      const summaries: RunSummary[] = runs
-        .filter((r) => (!batchId || r.batchId === batchId) && (!presetId || r.presetId === presetId))
-        .map(({ system: _s, rawOutput: _o, deltas: _d, ...summary }) => summary)
-      return c.json(summaries)
+      const all = (await Promise.all((await files()).map((f) => summaryOf(f).catch(() => console.warn(`skipping unreadable run ${f}`))))).filter((r) => r !== undefined)
+      return c.json(all.filter((r) => (!batchId || r.batchId === batchId) && (!presetId || r.presetId === presetId)))
     })
     .get('/:id', async (c) => {
       const file = runId.safeParse(c.req.param('id')).success && (await find(c.req.param('id')))
