@@ -63,7 +63,7 @@ for (const r of existing) {
   have.set(key, (have.get(key) ?? 0) + 1)
 }
 
-const cliModels = models.filter((m: any) => (has('gateway') ? m.provider === 'gateway' : has('api') ? m.id in API_MATRIX : ['claude-code', 'codex', 'opencode'].includes(m.provider)) && (!has('provider') || m.provider === flag('provider')) && (!has('match') || m.id.includes(flag('match'))))
+const cliModels = models.filter((m: any) => !m.hidden && (has('gateway') ? m.provider === 'gateway' : has('api') ? m.id in API_MATRIX : ['claude-code', 'codex', 'opencode'].includes(m.provider)) && (!has('provider') || m.provider === flag('provider')) && (!has('match') || m.id.includes(flag('match'))))
 let queue: any[] = []
 for (const model of cliModels)
   for (const effort of has('api') ? API_MATRIX[model.id] : has('gateway') ? gatewayEffortsOf(model) : effortsOf(model))

@@ -12,6 +12,8 @@ export type Model = {
   plan?: Plan
   // AI Gateway upstream the run is pinned to.
   host?: string
+  // Superseded by a faster host; kept so saved runs keep their label and price.
+  hidden?: boolean
   // Reasoning values in the runner's own names, in picker order.
   supports: { strictJson: boolean; effort?: string[]; temperature: boolean }
 }
@@ -136,14 +138,14 @@ export const models: Model[] = [
   ...apiModels,
   ...apiModels.filter((m) => m.provider === 'anthropic').map(viaCli('claude-code', false)),
   ...apiModels.filter((m) => m.provider === 'openai').map(viaCli('codex', true)),
-  deepseekGateway,
+  { ...deepseekGateway, hidden: true },
   onFastHost(deepseekGateway, 'togetherai', [0.3, 1.2, 0.006]),
-  glmGateway,
+  { ...glmGateway, hidden: true },
   onFastHost(glmGateway, 'boundless', [0.12, 0.4, 0.024]),
   viaGateway('alibaba/qwen3.8-flash', 'Qwen3.8 Flash', 'alibaba', ['low', 'medium', 'xhigh'], true, [0.15, 0.47, 0.016, 0.2]),
   viaGateway('xiaomi/mimo-v2.6-flash', 'MiMo V2.6 Flash', 'xiaomi', ['low', 'medium', 'high'], true, [0.14, 0.28, 0.0028]),
   viaGateway('nvidia/nemotron-3.5-lightning', 'Nemotron 3.5 Lightning', 'fireworks', ['low', 'medium', 'high'], true, [0.05, 0.2, 0.01]),
-  qwen27Gateway,
+  { ...qwen27Gateway, hidden: true },
   onFastHost(qwen27Gateway, 'cerebras', [0.99, 1.49, 0.99]),
   viaGateway('minimax/minimax-m3.1-flash', 'MiniMax M3.1 Flash', 'minimax', ['low', 'medium', 'high', 'xhigh', 'max'], true, [0.15, 0.6, 0.015]),
   viaGateway('stepfun/step-3.7-flash', 'Step 3.7 Flash', 'stepfun', ['low', 'medium', 'high'], true, [0.2, 1.15, 0.04]),

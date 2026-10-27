@@ -31,7 +31,7 @@ export const app = new Hono()
   .get('/api/health', (c) => c.json({ ok: true }))
   .get('/api/models', async (c) => {
     const ready = await availableClis()
-    return c.json(models.filter((m) => (isCli(m.provider) ? ready.includes(m.provider) : process.env[keyEnv[m.provider]])))
+    return c.json(models.filter((m) => !m.hidden && (isCli(m.provider) ? ready.includes(m.provider) : process.env[keyEnv[m.provider]])))
   })
   .post('/api/run', run)
   .route('/api/runs', runsApi(fileURLToPath(new URL('../runs', import.meta.url))))
