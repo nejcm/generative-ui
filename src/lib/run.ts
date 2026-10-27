@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const runId = z.string().regex(/^[\w-]{1,64}$/)
 
-const error = z.object({ at: z.string(), message: z.string() })
+const error = z.object({ at: z.string(), message: z.string(), severity: z.enum(['warning', 'fatal']).optional() })
 
 export const RunRecord = z.strictObject({
   id: runId,
@@ -41,6 +41,7 @@ export const RunRecord = z.strictObject({
     costUsd: z.number().nullable(),
     valid: z.boolean(),
     errorCount: z.number().int(),
+    warningCount: z.number().int().optional(),
     errors: z.array(error),
     aborted: z.boolean(),
   }),
@@ -57,6 +58,8 @@ export const strictOutputOf = (headers: Headers) => {
   const value = headers.get('x-strict-output')
   return value === null ? null : value === 'true'
 }
+
+export const isWarning = (e: { severity?: string }) => e.severity === 'warning'
 
 export type Run = z.infer<typeof RunRecord>
 export type RunSummary = Omit<Run, 'system' | 'rawOutput' | 'deltas'>

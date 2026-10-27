@@ -2,7 +2,8 @@ import type { Spec } from '@json-render/core'
 import type { FC } from 'react'
 import type { catalog } from '@/catalog/catalog'
 
-export type ParseError = { at: string; message: string }
+// Absent severity means fatal: the output does not render as intended.
+export type ParseError = { at: string; message: string; severity?: 'warning' | 'fatal' }
 
 export type ParseState = {
   spec?: Spec

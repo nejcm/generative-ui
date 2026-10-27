@@ -97,7 +97,7 @@ export function flatToSpec(value: unknown, { complete, closed, final }: { comple
     const wire = wireError(raw)
     const props = wire ? {} : toProps(raw.type, raw.props as Kv[])
     for (const key of droppableProps(raw.type, props)) {
-      errors.push({ at: raw.id, message: `dropped invalid optional prop ${key}: ${JSON.stringify(props[key]).slice(0, 80)}` })
+      errors.push({ at: raw.id, message: `dropped invalid optional prop ${key}: ${JSON.stringify(props[key]).slice(0, 80)}`, severity: 'warning' })
       delete props[key]
     }
     const element = wire ? undefined : { type: String(raw.type), props, children: raw.children as string[] }

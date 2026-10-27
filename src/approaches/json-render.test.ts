@@ -85,7 +85,7 @@ describe('benchmark failures (gpt-6.1-sol, comparison preset)', () => {
   test('an extra trailing brace is repaired, applied, and still reported', async () => {
     const final = await parse(jsonl(lines.root, lines.main(['recommendation']), { op: 'add', path: '/state/priority', value: 'Travel and everyday work' }) + extraBrace + '\n')
     expect(final.spec!.elements.recommendation.type).toBe('Heading')
-    expect(final.errors).toEqual([{ at: 'line 4', message: 'repaired: removed 1 extra closing brace' }])
+    expect(final.errors).toEqual([{ at: 'line 4', message: 'repaired: removed 1 extra closing brace', severity: 'warning' }])
   })
 
   test('a line broken in the middle is not "repaired"', async () => {

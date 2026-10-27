@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { html, withCsp } from './html'
+import { html, htmlErrors, withCsp } from './html'
 import { chartScript } from './html-shell'
 import { replay } from './replay'
 
@@ -13,7 +13,7 @@ describe.each([1, 7, 42])('html parser, seed %i', (seed) => {
     expect(final).toEqual({ html: page, renderable: true, errors: [] })
   })
 
-  test('truncated stream is not an error while it has HTML', async () => {
+  test('a stream cut where only optional end tags are open is not an error', async () => {
     const { final } = await replay(html.createParser(), page.slice(0, page.indexOf('<p>')), seed)
     expect(final.renderable).toBe(true)
     expect(final.errors).toEqual([])
@@ -28,6 +28,34 @@ describe.each([1, 7, 42])('html parser, seed %i', (seed) => {
     const { final } = await replay(html.createParser(), 'Sorry, I cannot do that.', seed)
     expect(final.errors).toHaveLength(1)
   })
+
+  test('a stream cut inside an element is an error only at end()', async () => {
+    const { states, final } = await replay(html.createParser(), '<div class="page"><h1>Title</h1><p>Body', seed)
+    expect(states.every((s) => s.errors.length === 0)).toBe(true)
+    expect(final.errors).toEqual([{ at: 'output', message: 'unclosed <div>' }])
+  })
+})
+
+describe('htmlErrors', () => {
+  test.each([
+    ['void, self-closing, optional end tags and doctype', '<!doctype html><ul><li>a<li>b</ul><img src="x"><br><svg><path d="M0"/></svg><table><tr><td>1</table>'],
+    ['tags inside script, style and comments', '<p>x</p><script>el.innerHTML = "<div><span>"</script><style>a::after{content:"<b>"}</style><!-- <div> -->'],
+    ['a chart-only page', `<div data-chart='{"type":"bar","data":[]}'></div>`],
+    ['an entity-encoded chart attribute', '<div data-chart="{&quot;type&quot;:&quot;pie&quot;}"></div>'],
+    ['> inside a quoted attribute and a bare <', '<p title="a > b">1 < 2</p>'],
+  ])('accepts %s', (_, input) => expect(htmlErrors(input)).toEqual([]))
+
+  test.each([
+    ['', 'no HTML in output'],
+    ['<div>  &nbsp; </div>', 'no visible content'],
+    ['<div><span>a</div>', 'unclosed <span> before </div>'],
+    ['<p>a</p></section>', 'stray closing tag </section>'],
+    ['<div>a</div><p class="x', 'unclosed opening tag or attribute'],
+    ['<p>a</p><script>let x = 1', 'unclosed <script>'],
+    ['<p>a</p><!-- note', 'unclosed comment'],
+    [`<p>a</p><div data-chart='{"type":"bar",'></div>`, 'data-chart is not valid JSON'],
+    [`<p>a</p><div data-chart='[1]'></div>`, 'data-chart is not a JSON object'],
+  ])('rejects %j', (input, message) => expect(htmlErrors(input).map((e) => e.message)).toContain(message))
 })
 
 test('CSP meta precedes all generated markup', () => {

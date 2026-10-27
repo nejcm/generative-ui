@@ -39,6 +39,11 @@ describe('stats', () => {
     expect(g.tokensPerSec).toBeCloseTo(83.33, 2)
   })
 
+  it('strict % needs zero errors; visible tokens need a reported reasoning split', () => {
+    const [g] = groupBy([run({ outputTokens: 600, reasoningTokens: 200, outputChars: 1200 }), run({ errors: [{ at: 'a', message: 'x', severity: 'warning' }], warningCount: 1, errorCount: 1 })], () => 'all')
+    expect(g).toMatchObject({ validPct: 100, strictPct: 50, visibleTokens: 400, charsPerVisibleToken: 3 })
+  })
+
   it('spread gives median, min and max, skipping nulls', () => {
     expect(spread([3, null, 1, 2])).toEqual({ median: 2, min: 1, max: 3 })
     expect(spread([5])).toEqual({ median: 5, min: 5, max: 5 })
