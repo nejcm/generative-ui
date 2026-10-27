@@ -20,7 +20,7 @@ function createParser(): Parser {
   let invalid: string | undefined
   let escaped = false, rootSeen = false, textSeen = false
 
-  const error = (message: string, at = 'output') => errors.push({ at, message })
+  const error = (message: string, at = 'output', severity?: 'warning') => errors.push({ at, message, ...(severity && { severity }) })
   const fail = (message: string) => { invalid = message; quote = ''; escaped = false; mode = 'discard' }
   const finish = (selfClosing: boolean) => {
     const parent = stack.at(-1)
@@ -34,10 +34,10 @@ function createParser(): Parser {
       const props = Object.fromEntries(attrs.map(([key, raw]) => [key, decodeProp(name, key, decodeEntities(raw))]))
       if (Object.hasOwn(componentProps, name)) {
         for (const key of Object.keys(props)) {
-          if (!validatorOf(name, key)) { error(`unknown prop ${key} on ${name}`, id); delete props[key] }
+          if (!validatorOf(name, key)) { error(`unknown prop ${key} on ${name}`, id, 'warning'); delete props[key] }
         }
         for (const key of droppableProps(name, props)) {
-          error(`dropped invalid optional prop ${key}: ${JSON.stringify(props[key]).slice(0, 80)}`, id)
+          error(`dropped invalid optional prop ${key}: ${JSON.stringify(props[key]).slice(0, 80)}`, id, 'warning')
           delete props[key]
         }
       }

@@ -113,7 +113,7 @@ test.each(['__proto__', 'prototype', 'constructor', 'toString', 'visible', 'on',
   const result = await parse(`<Stack ${name}='{"polluted":true}'><Text text="Shown"/></Stack>`)
   expect(Object.keys(result.spec!.elements)).toEqual(['r', 'r.0'])
   expect(result.spec!.elements.r.props).toEqual({})
-  expect(result.errors).toEqual([{ at: 'r', message: `unknown prop ${name} on Stack` }])
+  expect(result.errors).toEqual([{ at: 'r', message: `unknown prop ${name} on Stack`, severity: 'warning' }])
   expect(Object.hasOwn(Object.prototype, 'polluted')).toBe(false)
 })
 

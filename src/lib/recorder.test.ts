@@ -91,6 +91,12 @@ test('an empty delta counts as a delta, and no delta never does', async () => {
   expect(progress.map((p) => p.gotDelta)).toEqual([false])
 })
 
+test('warnings keep a run valid and are counted', async () => {
+  const markup = approaches.find((a) => a.id === 'markup')!
+  const result = await run([[10, delta('<Stack gap="lg" className="x"/>')], [20, done]], markup)
+  expect(result.metrics).toMatchObject({ valid: true, errorCount: 1, warningCount: 1 })
+})
+
 test('a parser throw is a parser error, keeps the raw output and is not a transport error', async () => {
   const result = await run([[10, delta('<p>hi')], [20, delta('</p>')], [30, delta('<p>more')], [40, done]], failing)
   expect(result.rawOutput).toBe('<p>hi</p><p>more')

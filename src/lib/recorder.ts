@@ -7,7 +7,7 @@ import { fidelity } from './fidelity'
 import { sha256 } from './hash'
 import { readNdjson, type RunEvent } from './ndjson'
 import { fold } from './playback'
-import { strictOutputOf, type Run } from './run'
+import { isWarning, strictOutputOf, type Run } from './run'
 
 export type RunRequest = {
   batchId: string
@@ -117,8 +117,9 @@ export async function record(
       coverage: fixture === undefined ? undefined : coverage(fixture, rawOutput),
       fidelity: fidelity(state, presets.find((p) => p.id === request.presetId)?.requires),
       costUsd: usage ? cost(model, usage) : null,
-      valid: !aborted && errors.length === 0,
+      valid: !aborted && errors.every(isWarning),
       errorCount: errors.length,
+      warningCount: errors.filter(isWarning).length,
       errors,
       aborted,
     },

@@ -160,7 +160,7 @@ describe('benchmark failures (login preset, every Claude model)', () => {
     const final = await parser.end()
     expect(final.spec!.elements.remember.props).toEqual({ label: 'Remember me for 30 days' })
     expect(final.spec!.elements.main.children).toEqual(['remember'])
-    expect(final.errors).toEqual([{ at: 'remember', message: expect.stringContaining('dropped invalid optional prop checked') }])
+    expect(final.errors).toEqual([{ at: 'remember', message: expect.stringContaining('dropped invalid optional prop checked'), severity: 'warning' }])
   })
 
   test('an invalid required prop still rejects the element', async () => {

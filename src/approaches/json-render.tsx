@@ -49,7 +49,7 @@ function createParser(): Parser {
     // Models nesting $cond chains sometimes close one brace too many at the end of the line.
     for (let cut = 1; !patch && cut <= 3 && trimmed.endsWith('}'.repeat(cut)); cut++) {
       patch = parseSpecStreamLine(trimmed.slice(0, -cut))
-      if (patch) errors.push({ at, message: `repaired: removed ${cut} extra closing brace${cut > 1 ? 's' : ''}` })
+      if (patch) errors.push({ at, message: `repaired: removed ${cut} extra closing brace${cut > 1 ? 's' : ''}`, severity: 'warning' })
     }
     const error = patch ? apply(patch) : `not a JSON patch: ${trimmed.slice(0, 80)}`
     if (error) errors.push({ at, message: error })
