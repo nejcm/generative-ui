@@ -12,6 +12,7 @@ import { Replay } from './Replay'
 import { Result, stripOf } from './Result'
 
 // Oldest first; the Lab has room for the latest four.
+const PAGE = 100
 const loadRuns = (runs: RunSummary[]) => Promise.all(runs.slice(-4).map((r) => getJson<Run>(`/api/runs/${r.id}`)))
 
 export async function loadBatch(batchId: string) {
@@ -28,6 +29,7 @@ const configOf = (r: RunSummary) => `${presetLabel(r.presetId)} · ${modelLabel(
 export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void }) {
   const [presetId, setPresetId] = useState('')
   const [runs, setRuns] = useState<RunSummary[]>()
+  const [shown, setShown] = useState(PAGE)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<{
     run: Run
@@ -79,7 +81,11 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
           <p>{runs ? `${runs.length} saved runs in ${groups.length} groups. Select a run to see its output, metrics and replay.` : 'Loading saved runs…'}</p>
         </div>
         <div className="acts w-64">
-          <Choice label="Preset filter" value={presetId} options={[{ value: '', label: 'All presets' }, ...presets.map((p) => ({ value: p.id, label: p.label }))]} onChange={setPresetId} />
+          <Choice label="Preset filter" value={presetId} options={[{ value: '', label: 'All presets' }, ...presets.map((p) => ({ value: p.id, label: p.label }))]} onChange={(v) => {
+              setPresetId(v)
+              setShown(PAGE)
+            }}
+          />
         </div>
       </div>
       {error && <div className="notice">{error}</div>}
@@ -100,7 +106,7 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
             </tr>
           </thead>
           <tbody>
-            {groups.map(([config, group]) => (
+            {groups.slice(0, shown).map(([config, group]) => (
               <Fragment key={config}>
                 <tr className="batch">
                   <td colSpan={10}>
@@ -217,6 +223,11 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
             ))}
           </tbody>
         </table>
+        {groups.length > shown && (
+          <button type="button" className="btn btn-sm self-center" onClick={() => setShown((n) => n + PAGE)}>
+            Show more ({groups.length - shown} groups left)
+          </button>
+        )}
         {runs?.length === 0 && <p className="ph">No runs yet. Runs are saved here when they finish in the Lab.</p>}
       </section>
     </div>
