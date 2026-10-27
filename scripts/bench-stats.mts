@@ -24,9 +24,9 @@ const p90 = (rs: any[]) => {
   const a = rs.map((r) => r.metrics.totalMs).sort((x, y) => x - y)
   return a.length ? a[Math.ceil(0.9 * a.length) - 1] : null
 }
-const model = (r: any) => r.modelId.replace('-subscription', '').replace('-opencode-go', '')
+const model = (r: any) => r.modelId.replace('-subscription', '').replace('-opencode-go', '').replace('-gateway', '')
 const effort = (r: any) => r.settings.effort ?? 'none'
-const provider = (r: any) => (r.modelId.endsWith('opencode-go') ? 'opencode-go' : (r.modelId.startsWith('claude') ? 'anthropic' : 'openai') + (r.modelId.endsWith('-subscription') ? ' (cli)' : ' (api)'))
+const provider = (r: any) => (r.modelId.endsWith('opencode-go') ? 'opencode-go' : r.modelId.endsWith('-gateway') ? 'gateway' : (r.modelId.startsWith('claude') ? 'anthropic' : 'openai') + (r.modelId.endsWith('-subscription') ? ' (cli)' : ' (api)'))
 
 function table(title: string, keyOf: (r: any) => string) {
   const byKey = new Map<string, any[]>()

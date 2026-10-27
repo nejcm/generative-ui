@@ -9,6 +9,7 @@ import { runsApi } from './runs.ts'
 const keyEnv: Record<Exclude<Provider, CliProvider>, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
+  gateway: 'AI_GATEWAY_API_KEY',
 }
 
 let clis: Promise<CliProvider[]> | undefined

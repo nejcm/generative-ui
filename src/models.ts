@@ -1,4 +1,4 @@
-export type Provider = 'anthropic' | 'openai' | 'claude-code' | 'codex' | 'opencode'
+export type Provider = 'anthropic' | 'openai' | 'gateway' | 'claude-code' | 'codex' | 'opencode'
 
 export type Plan = 'subscription' | 'subscription or credits'
 
@@ -10,6 +10,8 @@ export type Model = {
   // Absent for subscription models, which are billed by the user's plan.
   price?: { inPerMTok: number; outPerMTok: number; cachedInPerMTok?: number; cacheWritePerMTok?: number; source: string; checkedAt: string }
   plan?: Plan
+  // AI Gateway upstream the run is pinned to.
+  host?: string
   // Reasoning values in the runner's own names, in picker order.
   supports: { strictJson: boolean; effort?: string[]; temperature: boolean }
 }
@@ -74,6 +76,26 @@ const viaCli =
     supports: { strictJson, effort: standardEffort, temperature: false },
   })
 
+const gatewayPricing = 'https://ai-gateway.vercel.sh/v1/models'
+
+// Pinned to one host, since price and quantization vary by upstream; prices and effort from `GET /v1/models/{id}/endpoints`.
+const viaGateway = (
+  name: string,
+  label: string,
+  host: string,
+  effort: string[],
+  temperature: boolean,
+  [inPerMTok, outPerMTok, cachedInPerMTok, cacheWritePerMTok]: number[],
+): Model => ({
+  id: `${name.split('/')[1]}-gateway`,
+  provider: 'gateway',
+  modelName: name,
+  label: `${label} · AI Gateway`,
+  host,
+  price: { inPerMTok, outPerMTok, cachedInPerMTok, cacheWritePerMTok, source: gatewayPricing, checkedAt: '2026-10-27' },
+  supports: { strictJson: true, effort, temperature },
+})
+
 // Effort values are the general levels among the model's opencode variants (`GET /api/model`, opencode v2.0.32).
 const opencodeGo = (name: string, label: string, effort: string[]): Model => ({
   id: `${name}-opencode-go`,
@@ -99,6 +121,14 @@ export const models: Model[] = [
   ...apiModels,
   ...apiModels.filter((m) => m.provider === 'anthropic').map(viaCli('claude-code', false)),
   ...apiModels.filter((m) => m.provider === 'openai').map(viaCli('codex', true)),
+  viaGateway('deepseek/deepseek-v4.1-flash', 'DeepSeek V4.1 Flash', 'deepseek', ['low', 'high', 'max'], true, [0.15, 0.6, 0.003]),
+  viaGateway('zai/glm-5.3-flash', 'GLM-5.3 Flash', 'zai', ['low', 'high', 'max'], true, [0.15, 0.5, 0.03]),
+  viaGateway('moonshotai/kimi-k3', 'Kimi K3', 'moonshotai', ['low', 'high', 'max'], false, [3, 15, 0.3, 3]),
+  viaGateway('minimax/minimax-m3', 'MiniMax M3', 'minimax', [], true, [0.3, 1.2, 0.06]),
+  viaGateway('alibaba/qwen3.8-max', 'Qwen3.8 Max', 'alibaba', ['low', 'medium', 'xhigh'], true, [2, 6, 0.25, 2.5]),
+  viaGateway('alibaba/qwen3.8-flash', 'Qwen3.8 Flash', 'alibaba', ['low', 'medium', 'xhigh'], true, [0.15, 0.47, 0.016, 0.2]),
+  viaGateway('xiaomi/mimo-v2.6-flash', 'MiMo V2.6 Flash', 'xiaomi', ['low', 'medium', 'high'], true, [0.14, 0.28, 0.0028]),
+  viaGateway('nvidia/nemotron-3-ultra-550b-a55b', 'Nemotron 3 Ultra', 'fireworks', ['low', 'medium', 'high'], true, [0.6, 2.4, 0.12]),
   opencodeGo('deepseek-v4.1-flash', 'DeepSeek V4.1 Flash', ['high', 'max']),
   opencodeGo('glm-5.3-flash', 'GLM-5.3 Flash', ['high', 'max']),
   opencodeGo('kimi-k3', 'Kimi K3', ['max']),

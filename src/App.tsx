@@ -31,6 +31,7 @@ const pageTitle: Record<Page, string> = {
 const providers: [Provider, string][] = [
   ['anthropic', 'Anthropic API'],
   ['openai', 'OpenAI API'],
+  ['gateway', 'Vercel AI Gateway'],
   ['claude-code', 'Claude Code CLI'],
   ['codex', 'Codex CLI'],
   ['opencode', 'OpenCode CLI'],
