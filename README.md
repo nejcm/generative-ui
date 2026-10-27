@@ -85,4 +85,4 @@ MIT, see [LICENSE](LICENSE).
 
 ## Static demo
 
-`node scripts/export-demo.mts [--max 100]` bundles saved runs into `public/demo/`. `.github/workflows/pages.yml` builds the app with `VITE_DEMO=1` and deploys it to GitHub Pages as a replay-only site. Run-only controls are disabled; rating does not persist.
+`node scripts/export-demo.mts [--max 100] [--skip id1,id2]` bundles saved runs into `public/demo/`. `.github/workflows/pages.yml` builds the app with `VITE_DEMO=1` and deploys it to GitHub Pages as a replay-only site. Run-only controls are disabled; rating does not persist.

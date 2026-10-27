@@ -1,6 +1,6 @@
 # Generative UI rendering benchmark
 
-Latest run: **2026-10-26/27**, API-billed, all 10 presets, 4 approaches (below). Earlier subscription-billed runs are kept as Appendix A (2026-10-25) and Appendix B (2026-10-24). Raw runs are in `runs/` (batch `bench-2026-10-26`; the 2026-10-25 runs are archived in `plans/runs-2026-10-25.tgz`). Tables regenerate with `node scripts/bench-stats.mts bench-2026-10-26`; the matrix is `node scripts/bench.mts bench-2026-10-26 --api --repeats 1 --concurrency 1 --delay-ms 1000`.
+Latest run: **2026-10-26/27**, API-billed, all 10 presets, 4 approaches (below). Smaller open-weight models through the Vercel AI Gateway follow in their own section. Earlier subscription-billed runs are kept as Appendix A (2026-10-25) and Appendix B (2026-10-24). Raw runs are in `runs/` (batch `bench-2026-10-26`; the 2026-10-25 runs are archived in `plans/runs-2026-10-25.tgz`). Tables regenerate with `node scripts/bench-stats.mts bench-2026-10-26`; the matrix is `node scripts/bench.mts bench-2026-10-26 --api --repeats 1 --concurrency 1 --delay-ms 1000`.
 
 ## Setup (2026-10-26/27)
 
@@ -16,7 +16,7 @@ Latest run: **2026-10-26/27**, API-billed, all 10 presets, 4 approaches (below).
 - Not a quality study: no human ratings. Validity is parser-level only.
 - Concurrency 1 means no shared-limit queueing, but provider load still varies over the ~4 h run.
 - Tokens/s = output tokens / total time, including thinking.
-- Open-weight models are benchmarked separately through the Vercel AI Gateway (batch `gateway-2026-10-27`).
+- Open-weight models are benchmarked separately through the Vercel AI Gateway (batch `gateway-2026-10-27`, section below).
 
 ## Headline findings
 
@@ -109,6 +109,89 @@ markup x comparison is the weakest cell (67% valid, n=9); all other approach x p
 - **Low effort by default.** Medium/high add 1.1-2x time; only Luna and Haiku showed a small validity benefit.
 - Value picks: Haiku low (fastest, ~$0.001/run), Luna low (cheapest, ~10 s). Skip Opus for this task.
 - Next: add human ratings (fidelity/coverage are saturated or absent for 7 of 10 presets); define `requires`/fixtures for the other presets; rerun with n>=3 for cells that matter.
+
+---
+
+# Open-weight models via Vercel AI Gateway (2026-10-27)
+
+Batch `gateway-2026-10-27`: smaller open-weight models through the Vercel AI Gateway, API-billed (`AI_GATEWAY_API_KEY`), each pinned to one host. Tables regenerate with `node scripts/bench-stats.mts gateway-2026-10-27`; the matrix is `node scripts/bench.mts gateway-2026-10-27 --gateway --concurrency 2`.
+
+## Setup
+
+- **584 runs kept**, 1 per cell, 4 approaches x 10 presets x each model's lowest and highest effort (`xhigh` and `max` skipped; models with low/medium/high ran low + high).
+- Models (host): DeepSeek V4.1 Flash (deepseek), GLM-5.3 Flash (zai), Qwen3.8 Flash (alibaba), Qwen3.8 27B (deepinfra), MiniMax M3.1 Flash (minimax), Nemotron 3.5 Lightning (fireworks), Step 3.7 Flash (stepfun), Inkling Small (thinkingmachines).
+- **Fast-host variants** of three models, on the gateway's fastest hosts by 1 h throughput: Qwen3.8 27B on cerebras, DeepSeek V4.1 Flash on togetherai, GLM-5.3 Flash on boundless. Capped at ~50 runs in total; where a cell has a fast-host run, the original-host run was deleted, so the original hosts cover the remaining cells only (Qwen3.8 27B: 40, DeepSeek: 57, GLM: 59).
+- Gateway output was capped at 32,768 tokens (`maxOutputTokens`); MiniMax's host default of 4,096 was used up by reasoning and produced empty output, and those runs were rerun after the fix.
+- Removed: 22 runs that failed in transport (a gateway-wide burst of "Failed to process successful response", MiniMax 500s), 19 runs over 3x their model/effort median time and 30 s, MiMo V2.6 Flash (too slow to finish: ~99 s median), and `states` trimmed to one run per model. Cells emptied for models without a fast variant were rerun once.
+- A few cells (Inkling max/medium, MiniMax medium, Nemotron medium; 1 run each) are leftovers from setup tests.
+- Total cost: **$1.75 for 584 runs**.
+
+## Headline findings
+
+1. **The open-weight set is far less reliable than Claude/OpenAI**: 73% valid overall vs 98-99% for the API models. Of the original-host models only Qwen3.8 27B (98%) and DeepSeek V4.1 Flash (89%) are close.
+2. **html is 100% valid for every open-weight model** (146/146). Structured formats break: flat-strict 72%, markup 71%, json-render 48%.
+3. **json-render is the weak point.** Nemotron 6% (declares a root id and never adds it), MiniMax 32%, Qwen3.8 Flash 33% (intermittent near-empty replies at low effort), Step 44%, Inkling 47%. Top errors: `Stack.gap` outside its enum (25), a stray closing brace repaired (22), missing type or root element (28).
+4. **flat-strict's `{key, value}` props format is the most common error** (163 occurrences), though valid runs can still contain it as a non-fatal warning.
+5. **These models are not faster than Claude/OpenAI on their default hosts.** Median total 16.9 s overall vs 10.3 s (Anthropic) and 15.3 s (OpenAI). Causes: slow pinned hosts (40-100 tok/s for Qwen3.8 27B, GLM, Qwen3.8 Flash), hidden or verbose reasoning (Step 5.6k output tokens, 44.9 s median; Nemotron 7.3k, 6.5k of it reasoning).
+6. **Host matters more than model size for speed.** Same model on a faster host:
+   - Qwen3.8 27B: deepinfra 44.9 s, 98% valid -> cerebras **2.0 s**, 65% valid.
+   - DeepSeek V4.1 Flash: deepseek 16.7 s, 89% -> togetherai **5.4 s**, 87%.
+   - GLM-5.3 Flash: zai 20.9 s, 78% -> boundless **5.8 s**, 42%.
+   The fast hosts may serve lower precision; validity held only on togetherai. Fast-host samples are small (12-31 runs).
+7. **Inkling Small is the fastest original-host model** (4.9 s median) but 66% valid; at low effort it writes very little (371 tokens, 74% coverage).
+8. **Effort helps a little, inconsistently**: Qwen3.8 Flash low -> medium 64% -> 81% valid (2x time); MiniMax low -> high 57% -> 69%. DeepSeek and Step got slightly worse at high.
+9. **Hardest preset: `comparison`** (53% valid, json-render 14%), as for the API models.
+10. **Cheap:** $0.0007-0.0076 per run (Step most expensive, GLM on boundless cheapest), about Haiku/Luna level; DeepSeek on togetherai costs ~1.6x its maker host.
+
+## Tables (medians; TTFR = time to first renderable UI)
+
+### By approach
+
+| approach | n | valid % | TTFR s | total s | p90 s | out tok |
+|---|---|---|---|---|---|---|
+| flat-strict | 146 | 72 | 10.7 | 18.5 | 58.1 | 2793 |
+| html | 146 | 100 | 7.3 | 21.9 | 57.5 | 3041 |
+| json-render | 145 | 48 | 9.0 | 17.8 | 62.5 | 2699 |
+| markup | 147 | 71 | 6.2 | 11.7 | 35.5 | 1405 |
+
+### By model
+
+| model (host) | n | valid % | TTFR s | total s | p90 s | out tok | reasoning tok | cost/run |
+|---|---|---|---|---|---|---|---|---|
+| qwen3.8-27b (deepinfra) | 40 | 98 | 9.4 | 44.9 | 94.0 | 1733 | 0 | $0.0040 |
+| deepseek-v4.1-flash (deepseek) | 57 | 89 | 9.9 | 16.7 | 36.2 | 3353 | 1419 | $0.0026 |
+| deepseek-v4.1-flash (togetherai) | 15 | 87 | 2.4 | 5.4 | 10.4 | 3009 | 763 | $0.0042 |
+| glm-5.3-flash (zai) | 59 | 78 | 4.3 | 20.9 | 40.6 | 1502 | 18 | $0.0012 |
+| qwen3.8-flash (alibaba) | 73 | 73 | 6.4 | 25.7 | 50.4 | 1656 | 254 | $0.0011 |
+| step-3.7-flash (stepfun) | 73 | 73 | 38.2 | 44.9 | 101.5 | 5609 | 0 | $0.0076 |
+| inkling-small (thinkingmachines) | 76 | 66 | 3.4 | 4.9 | 19.8 | 1040 | 0 | $0.0026 |
+| nemotron-3.5-lightning (fireworks) | 74 | 65 | 14.3 | 16.2 | 32.7 | 7293 | 6463 | $0.0017 |
+| qwen3.8-27b (cerebras) | 31 | 65 | 1.3 | 2.0 | 2.6 | 1825 | 456 | $0.0062 |
+| minimax-m3.1-flash (minimax) | 74 | 64 | 8.4 | 14.4 | 34.6 | 2315 | 366 | $0.0019 |
+| glm-5.3-flash (boundless) | 12 | 42 | 1.1 | 5.8 | 6.7 | 1630 | 0 | $0.0007 |
+
+Reasoning tokens are 0 where the host does not report them (Step's long TTFR suggests hidden reasoning).
+
+### Model x approach (valid % / median total s)
+
+| model | flat-strict | html | json-render | markup |
+|---|---|---|---|---|
+| qwen3.8-27b | 100 / 60.1 | 100 / 60.6 | 83 / 54.4 | 100 / 24.2 |
+| deepseek-v4.1-flash | 100 / 15.8 | 100 / 29.9 | 94 / 24.5 | 64 / 9.2 |
+| glm-5.3-flash | 71 / 22.2 | 100 / 25.0 | 71 / 24.3 | 69 / 13.1 |
+| qwen3.8-flash | 84 / 29.1 | 100 / 36.8 | 33 / 8.4 | 72 / 15.0 |
+| step-3.7-flash | 83 / 49.0 | 100 / 46.8 | 44 / 73.5 | 63 / 37.4 |
+| inkling-small | 33 / 4.2 | 100 / 6.4 | 47 / 6.9 | 79 / 4.2 |
+| nemotron-3.5-lightning | 63 / 11.5 | 100 / 18.5 | 6 / 24.4 | 89 / 12.0 |
+| minimax-m3.1-flash | 63 / 25.1 | 100 / 12.7 | 32 / 18.8 | 61 / 8.2 |
+| qwen3.8-27b (cerebras) | 70 / 1.9 | 100 / 2.0 | 55 / 2.3 | 57 / 1.8 |
+
+## Recommendations
+
+- **Use html for open-weight models.** It is the only approach that holds at 100%; structured formats need repair/retry around them.
+- **Pick the host, not just the model.** DeepSeek V4.1 Flash on togetherai is the best balance here (5.4 s, 87% valid, ~$0.004/run). Qwen3.8 27B on deepinfra is the most reliable (98%) but slow; on cerebras it is ~20x faster and less reliable.
+- Skip Nemotron 3.5 Lightning for json-render, and Step 3.7 Flash where latency matters.
+- Next: n>=3 for the fast-host cells, a json-render repair pass for the common errors (enum values, stray braces, missing root), and checking whether fast hosts serve quantized weights.
 
 ---
 
