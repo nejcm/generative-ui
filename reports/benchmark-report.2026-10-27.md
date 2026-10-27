@@ -1,15 +1,15 @@
 # Generative UI rendering benchmark
 
-Latest run: **2026-10-26/27**, API-billed, all 10 presets, 4 approaches (below). Smaller open-weight models through the Vercel AI Gateway follow in their own section. Earlier subscription-billed runs are kept as Appendix A (2026-10-25) and Appendix B (2026-10-24). Raw runs are in `runs/` (batch `bench-2026-10-26`; the 2026-10-25 runs are archived in `plans/runs-2026-10-25.tgz`). Tables regenerate with `node scripts/bench-stats.mts bench-2026-10-26`; the matrix is `node scripts/bench.mts bench-2026-10-26 --api --repeats 1 --concurrency 1 --delay-ms 1000`.
+Latest run: **2026-10-26/27**, API-billed, all 10 presets, 4 approaches (below). Smaller open-weight models through the Vercel AI Gateway follow in their own section. Earlier subscription-billed runs are kept as Appendix A (2026-10-25) and Appendix B (2026-10-24). Raw runs are in `runs/` (batch `bench-2026-10-26`; the 2026-10-25 runs are archived in `plans/runs-2026-10-25.tgz`). Tables regenerate with `node scripts/bench-stats.mts bench-2026-10-26`; the matrix is `node scripts/bench.mts bench-2026-10-26 --api --repeats 1 --concurrency 1 --delay-ms 1000`. The current `--api` matrix also contains four OpenCode Go configs that are no longer reported; filter with `--provider anthropic` / `--provider openai`.
 
 ## Setup (2026-10-26/27)
 
 - **360 runs planned, 1 per cell**: 9 model x effort configs x 4 approaches (json-render, flat-strict, html, markup) x 10 presets (login, dashboard, pricing, settings, comparison, portfolio, table, onboarding, profile, states). Run sequentially (concurrency 1, 1 s pause), so latencies are not inflated by our own queueing.
 - Anthropic API: Haiku 5.5 (low, medium), Sonnet 5.5 (low, medium), Opus 5.5 (low). OpenAI API: GPT-6 Luna (low, medium, high), GPT-6.1 Sol (low).
 - **328 runs kept.** `states` was trimmed to one run per model (it is the least informative preset), and one Luna run more than 3x its model/effort median time was dropped as an outlier.
-- Valid = parser reported zero errors. Fidelity (required content present) and coverage (fixture data shown) only exist for presets that define `requires`/fixtures (login, dashboard, comparison); fidelity was 100%.
+- Valid = parser reported zero errors. Fidelity (required content present) is scored on login, dashboard and comparison; coverage (fixture values present in the raw output, not proof they were displayed) on dashboard, comparison, portfolio and table. Median fidelity was 100%; two valid Luna json-render runs on `comparison` scored 0%. HTML validity only checks for an HTML-like tag, a much weaker test than the catalog/schema validation of the other three.
 - 3 runs hit OpenAI `server_is_overloaded` (503) mid-run (Sol); they were discarded and rerun. No quota stops occurred.
-- n=1 per cell: per-model/approach comparisons rest on 9-28 runs. Treat gaps under ~20% as noise.
+- n=1 per cell: per-model/approach comparisons rest on 9-28 runs. Small gaps are not reliable; no cell was repeated, so there is no measure of run-to-run variance.
 
 ## Caveats
 
@@ -20,15 +20,15 @@ Latest run: **2026-10-26/27**, API-billed, all 10 presets, 4 approaches (below).
 
 ## Headline findings
 
-1. **API Claude and OpenAI models are nearly always valid.** Anthropic 99% (n=183), OpenAI 98% (n=145). 7 invalid runs of 328.
-2. **html is the only approach that is 100% valid for every model** (82/82); flat-strict and json-render 99%, markup 96%.
+1. **API Claude and OpenAI models are nearly always valid.** Anthropic 99% (n=183), OpenAI 98% (n=145). 5 invalid runs of 328 (7 errors).
+2. **html is the only approach that is 100% valid for every model** (82/82; a weaker check, see Setup); flat-strict and json-render 99%, markup 96%.
 3. **markup is the fastest and most compact, and the least reliable.** 8.1 s median total and 1.0k output tokens, vs 13.6-15.5 s and 1.8-2.2k for the others. It is fastest for every model. Its failures: `Table` given a string (Luna 2, Haiku 1).
 4. **Hardest preset: `comparison`** (19.3 s median, 92% valid; markup only 67%). Easiest: `login` (5.6 s), `profile` (8.0 s). Total time tracks output size.
 5. **Effort buys latency, little else.** Haiku low -> medium: 6.0 s -> 11.3 s, valid 94% -> 100%. Sonnet low -> medium: 9.9 s -> 11.4 s, 100% both. Luna low/medium/high: 10.4/15.4/19.1 s, 1.1k/1.5k/2.0k tokens, valid 94/97/100%. Validity gains are small and rest on few failures.
 6. **Speed ranking (median total):** Haiku 8.1 s (245 tok/s), Sonnet 10.3 s, Opus 14.9 s, Luna 15.3 s, Sol 16.5 s (70 tok/s, but terse, 1.2k tokens). Sonnet has the best TTFR (1.5 s), Opus 1.8 s. Haiku medium shows 6.9 s TTFR because it thinks (857 reasoning tokens median); Haiku low is 1.5 s.
 7. **Sol is much faster than in the subscription runs** (16.5 s vs 26.3 s; TTFR 2.8 s vs 8.5 s), possibly API vs CLI overhead (not tested).
-8. **Opus buys nothing here**: 100% valid like Sonnet/Sol but ~1.5x Sonnet's time (14.9 s vs 10.3 s) and 2x its cost per run.
-9. **Cost (API, 360 planned runs = $5.11 total):** per run Luna $0.0008-0.0014, Haiku $0.0012-0.0017, Sol $0.018, Sonnet $0.025-0.027, Opus $0.053. A Luna run is about 1/60 the cost of Sonnet at similar validity but ~1.5x its time.
+8. **Opus showed no validity advantage**: 100% valid like Sonnet/Sol but ~1.5x Sonnet's time (14.9 s vs 10.3 s) and 2x its cost per run.
+9. **Cost (API, $5.11 for the original 360 runs; $4.81 for the 328 kept):** per run Luna $0.0008-0.0014, Haiku $0.0012-0.0017, Sol $0.018, Sonnet $0.025-0.027, Opus $0.053. A Luna run costs about 1/24 of a Sonnet run on average (1/30 at matched low effort) at similar validity but ~1.5x its time.
 
 ## Tables (328 runs; TTFR = time to first renderable UI, medians in seconds)
 
@@ -60,17 +60,17 @@ Latest run: **2026-10-26/27**, API-billed, all 10 presets, 4 approaches (below).
 
 ### Model x effort
 
-| model - effort | n | valid % | TTFR s | total s | tok/s | cost for 40 runs |
+| model - effort | n | valid % | TTFR s | total s | tok/s | est. cost for 40 runs (40 x mean) |
 |---|---|---|---|---|---|---|
-| haiku - low | 36 | 94 | 1.5 | 6.0 | 245 | $0.048 |
-| haiku - medium | 37 | 100 | 6.9 | 11.3 | 245 | $0.068 |
-| sonnet - low | 37 | 100 | 1.5 | 9.9 | 176 | $0.98 |
-| sonnet - medium | 36 | 100 | 1.6 | 11.4 | 177 | $1.07 |
-| opus - low | 37 | 100 | 1.8 | 14.9 | 129 | $2.11 |
-| luna - low | 36 | 94 | 3.8 | 10.4 | 105 | $0.032 |
-| luna - medium | 36 | 97 | 8.0 | 15.4 | 105 | $0.042 |
-| luna - high | 36 | 100 | 12.3 | 19.1 | 96 | $0.054 |
-| sol - low | 37 | 100 | 2.8 | 16.5 | 70 | $0.71 |
+| haiku - low | 36 | 94 | 1.5 | 6.0 | 245 | $0.050 |
+| haiku - medium | 37 | 100 | 6.9 | 11.3 | 245 | $0.071 |
+| sonnet - low | 37 | 100 | 1.5 | 9.9 | 176 | $0.995 |
+| sonnet - medium | 36 | 100 | 1.6 | 11.4 | 177 | $1.089 |
+| opus - low | 37 | 100 | 1.8 | 14.9 | 129 | $2.173 |
+| luna - low | 36 | 94 | 3.8 | 10.4 | 105 | $0.033 |
+| luna - medium | 36 | 97 | 8.0 | 15.4 | 105 | $0.043 |
+| luna - high | 36 | 100 | 12.3 | 19.1 | 96 | $0.053 |
+| sol - low | 37 | 100 | 2.8 | 16.5 | 70 | $0.724 |
 
 ### Model x approach (valid % / median total s)
 
@@ -99,51 +99,52 @@ Latest run: **2026-10-26/27**, API-billed, all 10 presets, 4 approaches (below).
 
 markup x comparison is the weakest cell (67% valid, n=9); all other approach x preset cells are 89-100% (full table: run the stats script).
 
-### Failures (7 invalid of 328)
+### Failures (5 invalid runs of 328, 7 errors)
 
 - `Table.rows` string instead of array (markup 3, flat-strict 1) and `Stat` number-for-string (json-render 3), all Haiku or Luna.
 
 ## Recommendations
 
-- **Default to html or json-render/flat-strict (all >= 99% valid); use markup when speed/tokens matter** and add `Table` coercion (a string where an array is expected is its top failure) to make it safe.
+- **Default to html or json-render/flat-strict (99-100% valid); use markup when speed/tokens matter** and test `Table` coercion (a string where an array is expected is its top failure) as a possible repair.
 - **Low effort by default.** Medium/high add 1.1-2x time; only Luna and Haiku showed a small validity benefit.
-- Value picks: Haiku low (fastest, ~$0.001/run), Luna low (cheapest, ~10 s). Skip Opus for this task.
-- Next: add human ratings (fidelity/coverage are saturated or absent for 7 of 10 presets); define `requires`/fixtures for the other presets; rerun with n>=3 for cells that matter.
+- Value picks: Haiku low (fastest, ~$0.001/run), Luna low (cheapest, ~10 s). Opus showed no validity advantage for its cost.
+- Next: add human ratings (fidelity/coverage are saturated, and five presets have neither); define `requires`/fixtures for the other presets; rerun with n>=3 for cells that matter.
 
 ---
 
 # Open-weight models via Vercel AI Gateway (2026-10-27)
 
-Batch `gateway-2026-10-27`: smaller open-weight models through the Vercel AI Gateway, API-billed (`AI_GATEWAY_API_KEY`), each pinned to one host. Tables regenerate with `node scripts/bench-stats.mts gateway-2026-10-27`; the matrix is `node scripts/bench.mts gateway-2026-10-27 --gateway --concurrency 2`.
+Batch `gateway-2026-10-27`: smaller open-weight models through the Vercel AI Gateway, API-billed (`AI_GATEWAY_API_KEY`), each pinned to one host. Tables regenerate with `node scripts/bench-stats.mts gateway-2026-10-27`; the matrix is `node scripts/bench.mts gateway-2026-10-27 --gateway --concurrency 2`. Several such processes ran in parallel (per model or host), so up to ~14 requests overlapped; latencies include that load.
 
 ## Setup
 
 - **584 runs kept**, 1 per cell, 4 approaches x 10 presets x each model's lowest and highest effort (`xhigh` and `max` skipped; models with low/medium/high ran low + high).
 - Models (host): DeepSeek V4.1 Flash (deepseek), GLM-5.3 Flash (zai), Qwen3.8 Flash (alibaba), Qwen3.8 27B (deepinfra), MiniMax M3.1 Flash (minimax), Nemotron 3.5 Lightning (fireworks), Step 3.7 Flash (stepfun), Inkling Small (thinkingmachines).
-- **Fast-host variants** of three models, on the gateway's fastest hosts by 1 h throughput: Qwen3.8 27B on cerebras, DeepSeek V4.1 Flash on togetherai, GLM-5.3 Flash on boundless. Capped at ~50 runs in total; where a cell has a fast-host run, the original-host run was deleted, so the original hosts cover the remaining cells only (Qwen3.8 27B: 40, DeepSeek: 57, GLM: 59).
+- **Fast-host variants** of three models, on the gateway's fastest hosts by 1 h throughput: Qwen3.8 27B on cerebras, DeepSeek V4.1 Flash on togetherai, GLM-5.3 Flash on boundless. 58 runs in total (31 + 15 + 12); where a cell has a fast-host run, the original-host run was deleted, so the original hosts cover the remaining cells only (Qwen3.8 27B: 40, DeepSeek: 57, GLM: 59).
 - Gateway output was capped at 32,768 tokens (`maxOutputTokens`); MiniMax's host default of 4,096 was used up by reasoning and produced empty output, and those runs were rerun after the fix.
 - Removed: 22 runs that failed in transport (a gateway-wide burst of "Failed to process successful response", MiniMax 500s), 19 runs over 3x their model/effort median time and 30 s, MiMo V2.6 Flash (too slow to finish: ~99 s median), and `states` trimmed to one run per model. Cells emptied for models without a fast variant were rerun once.
-- A few cells (Inkling max/medium, MiniMax medium, Nemotron medium; 1 run each) are leftovers from setup tests.
+- Five runs are leftovers from setup tests: Inkling medium (2) and max (1), MiniMax medium (1), Nemotron medium (1).
+- The removals above were made from bench logs during the session; the retained run files cannot show them. Four kept runs exceed the outlier threshold as recomputed on the final data.
 - Total cost: **$1.75 for 584 runs**.
 
 ## Headline findings
 
 1. **The open-weight set is far less reliable than Claude/OpenAI**: 73% valid overall vs 98-99% for the API models. Of the original-host models only Qwen3.8 27B (98%) and DeepSeek V4.1 Flash (89%) are close.
 2. **html is 100% valid for every open-weight model** (146/146). Structured formats break: flat-strict 72%, markup 71%, json-render 48%.
-3. **json-render is the weak point.** Nemotron 6% (declares a root id and never adds it), MiniMax 32%, Qwen3.8 Flash 33% (intermittent near-empty replies at low effort), Step 44%, Inkling 47%. Top errors: `Stack.gap` outside its enum (25), a stray closing brace repaired (22), missing type or root element (28).
-4. **flat-strict's `{key, value}` props format is the most common error** (163 occurrences), though valid runs can still contain it as a non-fatal warning.
-5. **These models are not faster than Claude/OpenAI on their default hosts.** Median total 16.9 s overall vs 10.3 s (Anthropic) and 15.3 s (OpenAI). Causes: slow pinned hosts (40-100 tok/s for Qwen3.8 27B, GLM, Qwen3.8 Flash), hidden or verbose reasoning (Step 5.6k output tokens, 44.9 s median; Nemotron 7.3k, 6.5k of it reasoning).
-6. **Host matters more than model size for speed.** Same model on a faster host:
+3. **json-render is the weak point.** Nemotron 6% (declares a root id and never adds it), MiniMax 32%, Qwen3.8 Flash 33% (intermittent near-empty replies at low effort), Step 44%, Inkling 47%. Top errors: `Stack.gap` outside its enum (25), a stray closing brace repaired (22), missing root element or undefined type (58 occurrences in 46 runs).
+4. **flat-strict's `{key, value}` props format is the most common error** (163 occurrences, in 16 runs, all invalid).
+5. **On their original hosts these models are mostly not faster than Claude/OpenAI.** Median total 18.7 s (n=526, excluding fast-host variants) vs 10.3 s (Anthropic) and 15.3 s (OpenAI). Inkling (4.9 s) is the exception. Likely contributors (not isolated): slow pinned hosts (40-100 tok/s for Qwen3.8 27B, GLM, Qwen3.8 Flash), hidden or verbose reasoning (Step 5.6k output tokens, 44.9 s median; Nemotron 7.3k, 6.5k of it reasoning).
+6. **The same model was much faster on a faster host** (observed; the samples share no cells, and size/precision were not controlled):
    - Qwen3.8 27B: deepinfra 44.9 s, 98% valid -> cerebras **2.0 s**, 65% valid.
    - DeepSeek V4.1 Flash: deepseek 16.7 s, 89% -> togetherai **5.4 s**, 87%.
    - GLM-5.3 Flash: zai 20.9 s, 78% -> boundless **5.8 s**, 42%.
-   The fast hosts may serve lower precision; validity held only on togetherai. Fast-host samples are small (12-31 runs).
+   Validity was similar only on togetherai; whether the other hosts serve lower precision is untested. Fast-host samples are small (12-31 runs).
 7. **Inkling Small is the fastest original-host model** (4.9 s median) but 66% valid; at low effort it writes very little (371 tokens, 74% coverage).
 8. **Effort helps a little, inconsistently**: Qwen3.8 Flash low -> medium 64% -> 81% valid (2x time); MiniMax low -> high 57% -> 69%. DeepSeek and Step got slightly worse at high.
 9. **Hardest preset: `comparison`** (53% valid, json-render 14%), as for the API models.
-10. **Cheap:** $0.0007-0.0076 per run (Step most expensive, GLM on boundless cheapest), about Haiku/Luna level; DeepSeek on togetherai costs ~1.6x its maker host.
+10. **Cheap:** mean cost per run $0.0007-0.0076 by model (Step highest, GLM on boundless lowest; individual runs $0.0001-0.023), mostly near Haiku/Luna, though Step is ~9x Luna low. togetherai lists DeepSeek at 2x the maker price per token; observed mean spend was ~1.6x.
 
-## Tables (medians; TTFR = time to first renderable UI)
+## Tables (medians except cost/run, which is a mean; TTFR = time to first renderable UI)
 
 ### By approach
 
@@ -178,7 +179,9 @@ Reasoning tokens are 0 where the host does not report them (Step's long TTFR sug
 |---|---|---|---|---|
 | qwen3.8-27b | 100 / 60.1 | 100 / 60.6 | 83 / 54.4 | 100 / 24.2 |
 | deepseek-v4.1-flash | 100 / 15.8 | 100 / 29.9 | 94 / 24.5 | 64 / 9.2 |
+| deepseek-v4.1-flash (togetherai) | 100 / 5.2 | 100 / 6.2 | 50 / 10.0 | 80 / 3.3 |
 | glm-5.3-flash | 71 / 22.2 | 100 / 25.0 | 71 / 24.3 | 69 / 13.1 |
+| glm-5.3-flash (boundless) | 0 / 6.2 | 100 / 6.5 | 100 / 4.4 | 0 / 5.1 |
 | qwen3.8-flash | 84 / 29.1 | 100 / 36.8 | 33 / 8.4 | 72 / 15.0 |
 | step-3.7-flash | 83 / 49.0 | 100 / 46.8 | 44 / 73.5 | 63 / 37.4 |
 | inkling-small | 33 / 4.2 | 100 / 6.4 | 47 / 6.9 | 79 / 4.2 |
@@ -188,8 +191,8 @@ Reasoning tokens are 0 where the host does not report them (Step's long TTFR sug
 
 ## Recommendations
 
-- **Use html for open-weight models.** It is the only approach that holds at 100%; structured formats need repair/retry around them.
-- **Pick the host, not just the model.** DeepSeek V4.1 Flash on togetherai is the best balance here (5.4 s, 87% valid, ~$0.004/run). Qwen3.8 27B on deepinfra is the most reliable (98%) but slow; on cerebras it is ~20x faster and less reliable.
+- **Use html for open-weight models.** It is the only approach at 100%, though its validity check is far weaker; structured formats need repair/retry around them.
+- **Pick the host, not just the model.** DeepSeek V4.1 Flash on togetherai looked like the best balance here (n=15) (5.4 s, 87% valid, ~$0.004/run). Qwen3.8 27B on deepinfra is the most reliable (98%) but slow; on cerebras it is ~20x faster and less reliable.
 - Skip Nemotron 3.5 Lightning for json-render, and Step 3.7 Flash where latency matters.
 - Next: n>=3 for the fast-host cells, a json-render repair pass for the common errors (enum values, stray braces, missing root), and checking whether fast hosts serve quantized weights.
 
