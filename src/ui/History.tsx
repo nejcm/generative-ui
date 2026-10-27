@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { approachById, parseAll, type Approach, type ParseState } from '@/approaches'
 import { getJson, whenCurrent } from '@/lib/async'
+import { queryParam, replaceQuery } from '@/lib/page'
 import { batchUsd, runCost, usd } from '@/lib/cost'
 import type { Run, RunSummary } from '@/lib/run'
 import { thinkingMs, writingMs, writingTokensPerSec } from '@/lib/stats'
@@ -47,9 +48,11 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
   async function toggle(id: string) {
     if (selected?.run.id === id) {
       selecting.current = undefined
+      replaceQuery('')
       return setSelected(undefined)
     }
     selecting.current = id
+    replaceQuery(`?run=${encodeURIComponent(id)}`)
     try {
       const run = await getJson<Run>(`/api/runs/${id}`)
       if (selecting.current !== id) return
@@ -61,6 +64,12 @@ export function History({ onOpenBatch }: { onOpenBatch: (runs: Run[]) => void })
       if (selecting.current === id) throw e
     }
   }
+
+  useEffect(() => {
+    const id = queryParam('run')
+    if (id) toggle(id).catch((e: Error) => setError(e.message))
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- restore once from the initial URL
+  }, [])
 
   const costOf = (r: RunSummary) =>
     runCost(

@@ -10,7 +10,7 @@ import { models as registry, type Model } from '@/models'
 import { fixtures } from '@/prompts'
 import { Choice } from './Choice'
 import { MetricsStrip } from './MetricsStrip'
-import { Replay } from './Replay'
+import { Replay, type ReplaySync } from './Replay'
 import { ApBadge, Collapsible, Errors, Indicator, live, Seg, statusOf, words, type LaneSummary } from './bits'
 import { Result, stripOf, type OutputView } from './Result'
 import { SystemPromptPanel } from './SystemPromptPanel'
@@ -30,6 +30,7 @@ type Props = {
   batch?: RunRequest
   stopTick: number
   loaded?: Run
+  sync?: ReplaySync
   onChange: (config: PaneConfig) => void
   view?: 'focus' | 'compare' | 'hidden'
   index?: number
@@ -47,7 +48,7 @@ const priceLine = (m?: Model) => (m ? (m.price ? `$${m.price.inPerMTok} in · $$
 const settingsLine = (s: Run['settings']) => [s.effort ? `effort ${s.effort}` : 'default effort', s.temperature != null && `temp ${s.temperature}`].filter(Boolean).join(' · ')
 
 export function Pane(props: Props) {
-  const { config, models, draft, batch, stopTick, loaded, onChange, view = 'focus', index = 0, count = 1, mode = 'focus', onMode, onNav, onFocus, onSummary } = props
+  const { config, models, draft, batch, stopTick, loaded, sync, onChange, view = 'focus', index = 0, count = 1, mode = 'focus', onMode, onNav, onFocus, onSummary } = props
   const approach = approachById(config.approach) ?? approaches[0]
   const model = models.find((m) => m.id === config.modelId) ?? models[0]
   const effort = config.settings.effort && model?.supports.effort?.includes(config.settings.effort) ? config.settings.effort : undefined
@@ -189,7 +190,7 @@ export function Pane(props: Props) {
   if (view === 'hidden') return null
 
   const output = replay ? (
-    <Replay key={replay.id} run={replay} view={outView} status={status} />
+    <Replay key={replay.id} run={replay} view={outView} status={status} sync={sync} />
   ) : (
     <Result
       key={runKey}

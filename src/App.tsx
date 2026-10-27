@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, BarChart3, Check, Copy, FlaskConical, History as Hi
 import { approachById, approaches } from '@/approaches'
 import { DEMO, getJson, whenCurrent } from '@/lib/async'
 import { usd } from '@/lib/cost'
-import { pageFromPath, type Page } from '@/lib/page'
+import { pageFromPath, queryParam, replaceQuery, type Page } from '@/lib/page'
 import type { Run, RunSummary } from '@/lib/run'
 import type { RunRequest } from '@/lib/recorder'
 import { models as registry, type Model, type Provider } from '@/models'
@@ -13,6 +13,7 @@ import { History, loadBatch } from './ui/History'
 import { Stats } from './ui/Stats'
 import { Pane, type PaneConfig } from './ui/Pane'
 import { PromptBar } from './ui/PromptBar'
+import { ReplayAll, type ReplaySync } from './ui/Replay'
 import { Timeline } from './ui/Timeline'
 
 const PANES_KEY = 'playground.panes'
@@ -79,9 +80,12 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
+  const labQuery = useRef('')
   function navigate(next: Page) {
     const path = `${import.meta.env.BASE_URL}${next === 'lab' ? '' : next}`
-    if (location.pathname !== path) window.history.pushState(null, '', `${path}${location.search}${location.hash}`)
+    const search = next === 'lab' ? labQuery.current : ''
+    if (location.pathname !== path) window.history.pushState(null, '', `${path}${search}${location.hash}`)
+    else replaceQuery(search)
     setPage(next)
   }
 
@@ -102,6 +106,7 @@ export default function App() {
   const [models, setModels] = useState<Model[] | undefined>(DEMO ? [] : undefined)
   const [panes, setPanes] = useState(loadPanes)
   const [loaded, setLoaded] = useState<Record<string, Run>>({})
+  const [sync, setSync] = useState<ReplaySync>()
   const [draft, setDraft] = useState<Omit<RunRequest, 'batchId'>>({
     prompt: '',
   })
@@ -109,7 +114,11 @@ export default function App() {
   const [stopTick, setStopTick] = useState(0)
   const [summaries, setSummaries] = useState<Record<string, LaneSummary>>({})
   const [focusKey, setFocusKey] = useState<string>()
-  const [mode, setMode] = useState<'focus' | 'compare'>('focus')
+  const [mode, setModeState] = useState<'focus' | 'compare'>('focus')
+  const setMode = (next: 'focus' | 'compare') => {
+    setModeState(next)
+    setSync(undefined)
+  }
   const [hiddenInCompare, setHiddenInCompare] = useState<string[]>([])
   const [recent, setRecent] = useState<RunSummary[]>([])
   const [error, setError] = useState('')
@@ -135,7 +144,9 @@ export default function App() {
     .join()
   useEffect(() => whenCurrent(getJson<RunSummary[]>('/api/runs'), setRecent, () => setRecent([])), [savedKey, page])
 
-  function openBatch(runs: Run[], showLab = true) {
+  // `query` makes the opened batch shareable; without it the Lab loads silently and keeps the URL.
+  function openBatch(runs: Run[], query?: string) {
+    if (!runs.length) throw new Error('No saved runs found.')
     const configs = runs.map((run) => ({
       key: crypto.randomUUID(),
       approach: run.approach,
@@ -152,15 +163,43 @@ export default function App() {
       fixtureId: runs[0].fixtureId,
     })
     setFocusKey(next[0].key)
-    if (showLab) navigate('lab')
+    setSync(undefined)
+    if (query === undefined) return
+    labQuery.current = query
+    navigate('lab')
   }
 
-  const openBatchId = (batchId: string) => loadBatch(batchId).then(openBatch, (e: Error) => setError(e.message))
+  const fail = (e: Error) => setError(e.message)
+  const openBatchId = (batchId: string) =>
+    loadBatch(batchId)
+      .then((runs) => openBatch(runs, `?batch=${encodeURIComponent(batchId)}`))
+      .catch(fail)
+  const openRuns = (runs: Run[]) => openBatch(runs, `?runs=${runs.map((r) => r.id).join(',')}`)
   const autoOpened = useRef(false)
+  useEffect(() => {
+    const restore = () => {
+      if (pageFromPath(location.pathname, import.meta.env.BASE_URL) !== 'lab' || location.search === labQuery.current) return
+      labQuery.current = location.search
+      const batchId = queryParam('batch')
+      const ids = queryParam('runs')?.split(',')
+      if (batchId || ids) autoOpened.current = true
+      if (batchId) openBatchId(batchId)
+      else if (ids)
+        Promise.all(ids.map((id) => getJson<Run>(`/api/runs/${encodeURIComponent(id)}`)))
+          .then(openRuns)
+          .catch(fail)
+    }
+    restore()
+    window.addEventListener('popstate', restore)
+    return () => window.removeEventListener('popstate', restore)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- the URL is the only input
+  }, [])
   useEffect(() => {
     if (!DEMO || autoOpened.current || !recent.length) return
     autoOpened.current = true
-    loadBatch(recent[0].batchId).then((runs) => openBatch(runs, false), (e: Error) => setError(e.message))
+    loadBatch(recent[0].batchId)
+      .then((runs) => openBatch(runs))
+      .catch(fail)
   })
   const focusIndex = Math.max(
     0,
@@ -176,6 +215,11 @@ export default function App() {
       return next
     })
 
+  // A lane that ran again since loading no longer shows its replay.
+  const replays = panes.flatMap((p) => {
+    const run = loaded[p.key]
+    return run?.deltas && summaries[p.key]?.savedId === run.id ? [run] : []
+  })
   const batches = [...new Map(recent.map((r) => [r.batchId, r])).values()].slice(0, 6)
   const toRate = DEMO ? 0 : recent.filter((r) => r.rating == null && !r.metrics.aborted).length
 
@@ -262,17 +306,24 @@ export default function App() {
             <span>/</span>
             <strong>{pageTitle[page]}</strong>
           </nav>
-          <div className="mnav">
-            <Seg
-              label="Pages"
-              value={page}
-              options={[
-                { value: 'lab', label: pageTitle.lab },
-                { value: 'history', label: pageTitle.history },
-                { value: 'stats', label: pageTitle.stats },
-              ]}
-              onChange={navigate}
-            />
+          <div className="ml-auto flex items-center gap-2">
+            <div className="mnav">
+              <Seg
+                label="Pages"
+                value={page}
+                options={[
+                  { value: 'lab', label: pageTitle.lab },
+                  { value: 'history', label: pageTitle.history },
+                  { value: 'stats', label: pageTitle.stats },
+                ]}
+                onChange={navigate}
+              />
+            </div>
+            <a className="btn btn-sm btn-ghost btn-ico" style={{ color: 'var(--fg-3)' }} href="https://github.com/nejcm/generative-ui" target="_blank" rel="noreferrer" aria-label="GitHub repository" title="GitHub repository">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6 0-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0 0 12 .3" />
+              </svg>
+            </a>
           </div>
         </header>
         <main className="sheet">
@@ -296,7 +347,11 @@ export default function App() {
                 <button type="button" className="btn" disabled={!anyLive} onClick={() => setStopTick((t) => t + 1)}>
                   <Square size={12} /> Stop all
                 </button>
-                <button type="button" className="btn btn-pri" disabled={!canRun} onClick={() => setBatch({ ...draft, batchId: crypto.randomUUID() })}>
+                <button type="button" className="btn btn-pri" disabled={!canRun} onClick={() => {
+                    labQuery.current = ''
+                    replaceQuery('')
+                    setBatch({ ...draft, batchId: crypto.randomUUID() })
+                  }}>
                   Run {panes.length} at once
                 </button>
               </div>
@@ -406,6 +461,7 @@ export default function App() {
                     onMode={setMode}
                   />
                 )}
+                {mode === 'compare' && replays.length > 1 && <ReplayAll key={replays.map((r) => r.id).join()} runs={replays} onSync={setSync} />}
                 <div className={mode === 'compare' ? 'cmp-grid' : 'contents'}>
                   {panes.map((config, i) => (
                     <Pane
@@ -416,6 +472,7 @@ export default function App() {
                       batch={batch}
                       stopTick={stopTick}
                       loaded={loaded[config.key]}
+                      sync={sync}
                       view={mode === 'compare' ? (hiddenInCompare.includes(config.key) ? 'hidden' : 'compare') : config.key === focused?.key ? 'focus' : 'hidden'}
                       index={i}
                       count={panes.length}
@@ -434,7 +491,7 @@ export default function App() {
               </div>
             </div>
           </div>
-          {page === 'history' && <History onOpenBatch={openBatch} />}
+          {page === 'history' && <History onOpenBatch={openRuns} />}
           {page === 'stats' && <Stats />}
         </main>
       </div>
